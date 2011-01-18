@@ -188,6 +188,7 @@ int main(int argc, char **argv)
 
     if(!leef_init())
         return -1;
+    leef_set_sniff_packet_size(128);
 
     if(argc < 5) {
         printf("Usage: %s <interface ip> <host> <port> <interval> [options]\n", argv[0]);
