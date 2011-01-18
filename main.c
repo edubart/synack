@@ -1,3 +1,7 @@
+/* Created by edubart FOR EDUCATIONAL AND TESTING purposes only.
+ * Project page https://github.com/edubart/synack
+ */
+
 #include "leef.h"
 
 #include <stdio.h>
@@ -34,10 +38,6 @@ inline int random_range(int min, int max) {
 
 inline uint8_t random_byte() {
     return (uint8_t)(rand() % 256);
-}
-
-inline uint32_t make_ip(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
-    return a | b << 8 | c << 16 | d << 24;
 }
 
 void signal_handler(int sig)
@@ -193,7 +193,7 @@ int main(int argc, char **argv)
         printf("Usage: %s <interface ip> <host> <port> <interval> [options]\n", argv[0]);
         printf("Options: \n");
         printf("-t [attack time]\t- Attack time in seconds\n");
-        printf("-d [file]\t- Send binary file as data with the connection\n");
+        printf("-d [file]\t- Send binary file as data when establishing connections\n");
         printf("-n \t- Do not establish connections, do a simple SYN flood\n");
         printf("* send interval in microseconds\n");
         printf("* default attack time: infinite\n");

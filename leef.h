@@ -1,3 +1,7 @@
+/* Created by edubart FOR EDUCATIONAL AND TESTING purposes only.
+ * Project page https://github.com/edubart/synack
+ */
+
 #ifndef LEEF_H
 #define LEEF_H
 

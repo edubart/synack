@@ -1,0 +1,8 @@
+ABOUT
+  Tool used for flooding TCP services with the 3-way TCP handshake causing
+  massive amount of connections on the host, exhausting it's resources and
+  leading to DOS(Denial of Service). Created for educational and testing
+  purposes.
+
+AUTHORS
+  edubart   - https://github.com/edubart
