@@ -1,5 +1,5 @@
-/* Created by edubart FOR EDUCATIONAL AND TESTING purposes only.
- * Project page https://github.com/edubart/synack
+/* libleef - A small library for packet sniff and injection,
+ * created by edubart - https://github.com/edubart
  */
 
 #ifndef LEEF_H
@@ -53,11 +53,6 @@ struct leef_sniffed_packet
     uint8_t *packetbuf;
 };
 
-/* internal API */
-int leef_adjust_sniffed_packet_buffer(struct leef_sniffed_packet *packet);
-uint16_t leef_get_family_link_type(uint16_t family);
-
-/* public API */
 int leef_init();
 void leef_terminate();
 
@@ -72,6 +67,12 @@ int leef_send_tcp_syn(uint32_t src_addr, uint32_t dest_addr, uint16_t src_port, 
 int leef_send_tcp_ack(uint32_t src_addr, uint32_t dest_addr, uint16_t src_port, uint16_t dest_port, uint32_t id, uint32_t seq, uint32_t ack_seq);
 
 uint32_t leef_resolve_hostname(const char *hostname);
-uint16_t leef_checksum(uint16_t *ptr, int nbytes);
+char *leef_addr_to_string(uint32_t addr);
+
+uint32_t leef_get_ticks();
+
+void leef_srand();
+int leef_random_range(int min, int max);
+uint8_t leef_random_byte();
 
 #endif

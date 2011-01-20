@@ -1,5 +1,5 @@
-/* Created by edubart FOR EDUCATIONAL AND TESTING purposes only.
- * Project page https://github.com/edubart/synack
+/* libleef - A small library for packet sniff and injection,
+ * created by edubart - https://github.com/edubart
  */
 
 #include "leef.h"
@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/time.h>
@@ -101,8 +102,35 @@ uint16_t leef_get_family_link_type(uint16_t family)
     return result;
 }
 
+uint16_t leef_checksum(uint16_t *ptr, int nbytes)
+{
+    uint32_t sum = 0;
+    uint16_t oddbyte;
+
+    sum = 0;
+    while(nbytes > 1)
+    {
+        sum += *ptr++;
+        nbytes -= 2;
+    }
+
+    if(nbytes == 1)
+    {
+        oddbyte = 0;
+        *((uint8_t *) &oddbyte) = *(uint8_t *)ptr;
+        sum += oddbyte;
+    }
+
+    sum  = (sum >> 16) + (sum & 0xffff);
+    sum += (sum >> 16);
+    return (uint16_t)~sum;
+}
+
 int leef_init()
 {
+    leef_get_ticks();
+    leef_srand();
+
     sniff_socket = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if(sniff_socket == -1) {
         fprintf(stderr, "Unable to create the raw socket! (Are you root?)");
@@ -132,7 +160,6 @@ void leef_terminate()
         close(sniff_socket);
     }
 }
-
 
 void leef_set_sniff_packet_size(int size)
 {
@@ -184,11 +211,22 @@ int leef_sniff_next_packet(struct leef_sniffed_packet *packet)
         } else if(packet->ip->protocol == IPPROTO_UDP) {
             packet->in_ip.udp = (struct udphdr *) ((char *) packet->ip + packet->ip->ihl * 4);
         }
+
+        /* convert */
+        packet->ip->tot_len = htons(packet->ip->tot_len);
+        packet->ip->id = htons(packet->ip->id);
+
+        if(packet->ip->protocol == IPPROTO_TCP) {
+            packet->in_ip.tcp->source = htons(packet->in_ip.tcp->source);
+            packet->in_ip.tcp->dest = htons(packet->in_ip.tcp->dest);
+            packet->in_ip.tcp->seq = htonl(packet->in_ip.tcp->seq);
+            packet->in_ip.tcp->ack_seq = htonl(packet->in_ip.tcp->ack_seq);
+            packet->in_ip.tcp->window = htons(packet->in_ip.tcp->window);
+        }
         return 1;
     }
     return 0;
 }
-
 
 int leef_send_raw_tcp(uint32_t src_addr, uint32_t dest_addr,
                 uint16_t src_port, uint16_t dest_port,
@@ -293,26 +331,30 @@ uint32_t leef_resolve_hostname(const char *hostname)
     return addr;
 }
 
-uint16_t leef_checksum(uint16_t *ptr, int nbytes)
+char *leef_addr_to_string(uint32_t addr)
 {
-    uint32_t sum = 0;
-    uint16_t oddbyte;
+    return inet_ntoa(*(struct in_addr*)&addr);
+}
 
-    sum = 0;
-    while(nbytes > 1)
-    {
-        sum += *ptr++;
-        nbytes -= 2;
-    }
+uint32_t leef_get_ticks() {
+    static struct timeval tv;
+    static unsigned long firstTick = 0;
+    gettimeofday(&tv, 0);
+    if(!firstTick)
+        firstTick = tv.tv_sec;
+    return ((tv.tv_sec - firstTick) * 1000) + (tv.tv_usec / 1000);
+}
 
-    if(nbytes == 1)
-    {
-        oddbyte = 0;
-        *((uint8_t *) &oddbyte) = *(uint8_t *)ptr;
-        sum += oddbyte;
-    }
+void leef_srand() {
+    struct timeval tv;
+    gettimeofday(&tv,NULL);
+    srand((tv.tv_sec * 1000) + (tv.tv_usec / 1000));
+}
 
-    sum  = (sum >> 16) + (sum & 0xffff);
-    sum += (sum >> 16);
-    return (uint16_t)~sum;
+int leef_random_range(int min, int max) {
+    return (int)(min + (rand() % (max - min + 1)));
+}
+
+uint8_t leef_random_byte() {
+    return (uint8_t)(rand() % 256);
 }

