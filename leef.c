@@ -133,19 +133,19 @@ int leef_init()
 
     sniff_socket = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if(sniff_socket == -1) {
-        fprintf(stderr, "Unable to create the raw socket! (Are you root?)");
+        fprintf(stderr, "Unable to create the raw socket! (Are you root?)\n");
         return 0;
     }
 
     send_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if(send_socket == -1) {
-        fprintf(stderr, "Unable to create the raw socket! (Are you root?)");
+        fprintf(stderr, "Unable to create the raw socket! (Are you root?)\n");
         return 0;
     }
 
     int hdrincl_on = 1;
     if(setsockopt(send_socket, IPPROTO_IP, IP_HDRINCL, (char *)&hdrincl_on, sizeof(hdrincl_on)) == -1) {
-        fprintf(stderr, "Unable to set IP_HDRINCL option!");
+        fprintf(stderr, "Unable to set IP_HDRINCL option!\n");
         return 0;
     }
     return 1;
@@ -309,12 +309,12 @@ int leef_send_raw_tcp(uint32_t src_addr, uint32_t dest_addr,
 
 int leef_send_tcp_syn(uint32_t src_addr, uint32_t dest_addr, uint16_t src_port, uint16_t dest_port, uint32_t id, uint32_t seq)
 {
-    return leef_send_raw_tcp(src_addr, dest_addr, src_port, dest_port, id, seq, 0, TCP_SYN, 5840, 64, 0, NULL);
+    return leef_send_raw_tcp(src_addr, dest_addr, src_port, dest_port, id, seq, 0, TCP_SYN, 5840, leef_random_range(56,70), 0, NULL);
 }
 
 int leef_send_tcp_ack(uint32_t src_addr, uint32_t dest_addr, uint16_t src_port, uint16_t dest_port, uint32_t id, uint32_t seq, uint32_t ack_seq)
 {
-    return leef_send_raw_tcp(src_addr, dest_addr, src_port, dest_port, id, seq, ack_seq, TCP_ACK, 5840, 64, 0, NULL);
+    return leef_send_raw_tcp(src_addr, dest_addr, src_port, dest_port, id, seq, ack_seq, TCP_ACK, 5840, leef_random_range(56,70), 0, NULL);
 }
 
 uint32_t leef_resolve_hostname(const char *hostname)
