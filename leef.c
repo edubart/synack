@@ -22,10 +22,6 @@
 #include <linux/if_ether.h>
 #include <linux/if_fddi.h>
 
-int send_socket = -1;
-int sniff_socket = -1;
-int sniff_size = SNIFF_BUFFER_SIZE;
-
 int leef_adjust_sniffed_packet_buffer(struct leef_sniffed_packet *packet)
 {
     switch(packet->linktype) {
@@ -126,47 +122,55 @@ uint16_t leef_checksum(uint16_t *ptr, int nbytes)
     return (uint16_t)~sum;
 }
 
-int leef_init()
+int leef_init(struct leef_handle *handle, int flags)
 {
     leef_get_ticks();
     leef_srand();
 
-    sniff_socket = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if(sniff_socket == -1) {
-        fprintf(stderr, "Unable to create the raw socket! (Are you root?)\n");
-        return 0;
+    handle->send_socket = -1;
+    handle->sniff_socket = -1;
+    handle->sniff_size = SNIFF_BUFFER_SIZE;
+
+    if(flags & SNIFFING) {
+        handle->sniff_socket = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+        if(handle->sniff_socket == -1) {
+            fprintf(stderr, "Unable to create the raw socket! (Are you root?)\n");
+            return 0;
+        }
     }
 
-    send_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    if(send_socket == -1) {
-        fprintf(stderr, "Unable to create the raw socket! (Are you root?)\n");
-        return 0;
-    }
+    if(flags & INJECTING) {
+        handle->send_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+        if(handle->send_socket == -1) {
+            fprintf(stderr, "Unable to create the raw socket! (Are you root?)\n");
+            return 0;
+        }
 
-    int hdrincl_on = 1;
-    if(setsockopt(send_socket, IPPROTO_IP, IP_HDRINCL, (char *)&hdrincl_on, sizeof(hdrincl_on)) == -1) {
-        fprintf(stderr, "Unable to set IP_HDRINCL option!\n");
-        return 0;
+        int hdrincl_on = 1;
+        if(setsockopt(handle->send_socket, IPPROTO_IP, IP_HDRINCL, (char *)&hdrincl_on, sizeof(hdrincl_on)) == -1) {
+            fprintf(stderr, "Unable to set IP_HDRINCL option!\n");
+            return 0;
+        }
     }
     return 1;
 }
 
-void leef_terminate()
+void leef_terminate(struct leef_handle *handle)
 {
-    if(send_socket != -1) {
-        close(send_socket);
+    if(handle->send_socket != -1) {
+        close(handle->send_socket);
     }
-    if(sniff_socket != -1) {
-        close(sniff_socket);
+    if(handle->sniff_socket != -1) {
+        close(handle->sniff_socket);
     }
 }
 
-void leef_set_sniff_packet_size(int size)
+void leef_set_sniff_packet_size(struct leef_handle *handle, int size)
 {
-    sniff_size = size;
+    handle->sniff_size = size;
 }
 
-int leef_sniff_next_packet(struct leef_sniffed_packet *packet)
+int leef_sniff_next_packet(struct leef_handle *handle, struct leef_sniffed_packet *packet)
 {
     static socklen_t fromlen = sizeof(struct sockaddr_ll);
     struct sockaddr_ll fromaddr;
@@ -176,22 +180,22 @@ int leef_sniff_next_packet(struct leef_sniffed_packet *packet)
     int ss;
 
     FD_ZERO(&set);
-    FD_SET(sniff_socket, &set);
+    FD_SET(handle->sniff_socket, &set);
 
     tv.tv_sec = 0;
     tv.tv_usec = 50000;
 
     do {
-        ss = select(sniff_socket + 1, &set, 0, 0, &tv);
+        ss = select(handle->sniff_socket + 1, &set, 0, 0, &tv);
     } while ((ss < 0) && (errno == EINTR));
 
-    if(FD_ISSET(sniff_socket, &set)) {
-        if(recvfrom(sniff_socket, packet->buf, sniff_size, 0, (struct sockaddr *)&fromaddr, &fromlen) == 0) {
+    if(FD_ISSET(handle->sniff_socket, &set)) {
+        if(recvfrom(handle->sniff_socket, packet->buf, handle->sniff_size, 0, (struct sockaddr *)&fromaddr, &fromlen) == 0) {
             return 0;
         }
 
         ifr.ifr_ifindex = fromaddr.sll_ifindex;
-        ioctl(sniff_socket, SIOCGIFNAME, &ifr);
+        ioctl(handle->sniff_socket, SIOCGIFNAME, &ifr);
 
         if(ntohs(fromaddr.sll_protocol) != ETH_P_IP) {
             return 0;
@@ -228,12 +232,12 @@ int leef_sniff_next_packet(struct leef_sniffed_packet *packet)
     return 0;
 }
 
-int leef_send_raw_tcp(uint32_t src_addr, uint32_t dest_addr,
+int leef_send_raw_tcp(struct leef_handle *handle, uint32_t src_addr, uint32_t dest_addr,
                 uint16_t src_port, uint16_t dest_port,
                 uint32_t id, uint32_t seq, uint32_t ack_seq, uint8_t flags, uint16_t window, uint8_t ttl,
                 uint16_t data_size, uint8_t *data)
 {
-    static uint8_t buffer[SEND_BUFFER_SIZE];
+    uint8_t buffer[SEND_BUFFER_SIZE];
     uint16_t packet_size = sizeof(struct iphdr) + sizeof(struct tcphdr) + data_size;
     struct iphdr ip;
     struct tcphdr tcp;
@@ -304,17 +308,37 @@ int leef_send_raw_tcp(uint32_t src_addr, uint32_t dest_addr,
     sktsin.sin_addr.s_addr = dest_addr;
     sktsin.sin_family = AF_INET;
     sktsin.sin_port = 0;
-    return sendto(send_socket, buffer, packet_size, 0, (struct sockaddr *)&sktsin, sizeof(struct sockaddr));
+    return sendto(handle->send_socket, buffer, packet_size, 0, (struct sockaddr *)&sktsin, sizeof(struct sockaddr));
 }
 
-int leef_send_tcp_syn(uint32_t src_addr, uint32_t dest_addr, uint16_t src_port, uint16_t dest_port, uint32_t id, uint32_t seq)
+int leef_send_tcp_syn(struct leef_handle *handle, uint32_t src_addr, uint32_t dest_addr, uint16_t src_port, uint16_t dest_port, uint32_t id, uint32_t seq)
 {
-    return leef_send_raw_tcp(src_addr, dest_addr, src_port, dest_port, id, seq, 0, TCP_SYN, 5840, leef_random_range(56,70), 0, NULL);
+    return leef_send_raw_tcp(handle, src_addr, dest_addr, src_port, dest_port, id, seq, 0, TCP_SYN, 5840, leef_random_range(56,70), 0, NULL);
 }
 
-int leef_send_tcp_ack(uint32_t src_addr, uint32_t dest_addr, uint16_t src_port, uint16_t dest_port, uint32_t id, uint32_t seq, uint32_t ack_seq)
+int leef_send_tcp_ack(struct leef_handle *handle, uint32_t src_addr, uint32_t dest_addr, uint16_t src_port, uint16_t dest_port, uint32_t id, uint32_t seq, uint32_t ack_seq)
 {
-    return leef_send_raw_tcp(src_addr, dest_addr, src_port, dest_port, id, seq, ack_seq, TCP_ACK, 5840, leef_random_range(56,70), 0, NULL);
+    return leef_send_raw_tcp(handle, src_addr, dest_addr, src_port, dest_port, id, seq, ack_seq, TCP_ACK, 5840, leef_random_range(56,70), 0, NULL);
+}
+
+const char *leef_name_tcp_flags(struct leef_sniffed_packet *packet)
+{
+    static char name[8];
+    int pos = 0;
+    if(packet->in_ip.tcp->syn == 1)
+        name[pos++] = 'S';
+    if(packet->in_ip.tcp->rst == 1);
+        name[pos++] = 'R';
+    if(packet->in_ip.tcp->fin == 1);
+        name[pos++] = 'F';
+    if(packet->in_ip.tcp->psh == 1);
+        name[pos++] = 'P';
+    if(packet->in_ip.tcp->ack == 1);
+        name[pos++] = 'A';
+    if(packet->in_ip.tcp->urg == 1);
+        name[pos++] = 'U';
+    name[pos] = 0;
+    return name;
 }
 
 uint32_t leef_resolve_hostname(const char *hostname)
@@ -352,9 +376,24 @@ void leef_srand() {
 }
 
 int leef_random_range(int min, int max) {
-    return (int)(min + (rand() % (max - min + 1)));
+    if(min > max) {
+        int tmp = max;
+        max = min;
+        min = tmp;
+    }
+    double range = max - min + 1;
+    int ret = (min + ((int)((range * rand())/ (RAND_MAX+1.0))));
+    return ret;
 }
 
 uint8_t leef_random_byte() {
-    return (uint8_t)(rand() % 256);
+    return (uint8_t)(rand() % 1 << 8);
+}
+
+uint16_t leef_random_u16() {
+    return (uint16_t)(rand() % (1 << 16));
+}
+
+uint32_t leef_random_u32(){
+    return (uint32_t)(leef_random_u16() << 16 | leef_random_u16());
 }

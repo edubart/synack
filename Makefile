@@ -1,9 +1,9 @@
 TARGET=synack
 SRCS=leef.c main.c
 OBJS=${SRCS:.c=.o}
-CCFLAGS=-Wall -O2
+CCFLAGS=-Wall -O2 -D_REENTRANT
 LDFLAGS=-s
-LIBS=
+LIBS=-lpthread
 
 .PHONY: all clean distclean
 all: ${TARGET}

