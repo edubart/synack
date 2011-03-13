@@ -327,15 +327,15 @@ const char *leef_name_tcp_flags(struct leef_sniffed_packet *packet)
     int pos = 0;
     if(packet->in_ip.tcp->syn == 1)
         name[pos++] = 'S';
-    if(packet->in_ip.tcp->rst == 1);
+    if(packet->in_ip.tcp->rst == 1)
         name[pos++] = 'R';
-    if(packet->in_ip.tcp->fin == 1);
+    if(packet->in_ip.tcp->fin == 1)
         name[pos++] = 'F';
-    if(packet->in_ip.tcp->psh == 1);
+    if(packet->in_ip.tcp->psh == 1)
         name[pos++] = 'P';
-    if(packet->in_ip.tcp->ack == 1);
+    if(packet->in_ip.tcp->ack == 1)
         name[pos++] = 'A';
-    if(packet->in_ip.tcp->urg == 1);
+    if(packet->in_ip.tcp->urg == 1)
         name[pos++] = 'U';
     name[pos] = 0;
     return name;

