@@ -23,7 +23,7 @@ uint32_t dest_addr;
 uint16_t dest_port;
 uint32_t sleep_interval;
 uint16_t attack_uuid;
-int attack_time = 0;
+uint32_t attack_time = 0;
 int num_threads = 1;
 int attack_type = CONN_FLOOD;
 
@@ -418,7 +418,7 @@ int main(int argc, char **argv)
                     break;
                 }
                 case 't':
-                    attack_time = atoi(argv[++arg])*1000;
+                    attack_time = (uint32_t)(atoi(argv[++arg]))*1000;
                     break;
                 case 'd': {
                     FILE *fp = fopen(argv[++arg], "rb");
