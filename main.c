@@ -147,7 +147,7 @@ void sniff_thread()
         }
 
         if(leef_get_ticks() - lastTicks >= 1000) {
-            printf("SYN: %d/s, SYN+ACK: %d/s, RST: %d/s, FIN: %d/s, NEW CONNs: %d/sec, FAILED CONNs: %d/sec, ALIVE CONNs: %d         \r",
+            printf("SYN: %d/s, SYN+ACK: %d/s, RST: %d/s, FIN: %d/s, NEW CONNs: %d/sec, FAILED CONNs: %d/sec, ALIVE CONNs: %d\n",
                    syn_sent, synack_received, rst_received, fin_received, new_connections, syn_sent - new_connections, alive_connections);
             fflush(stdout);
 
