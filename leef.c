@@ -172,7 +172,7 @@ void leef_set_sniff_packet_size(struct leef_handle *handle, int size)
 
 int leef_sniff_next_packet(struct leef_handle *handle, struct leef_sniffed_packet *packet)
 {
-    static socklen_t fromlen = sizeof(struct sockaddr_ll);
+    socklen_t fromlen = sizeof(struct sockaddr_ll);
     struct sockaddr_ll fromaddr;
     struct ifreq ifr;
     fd_set set;
@@ -361,8 +361,8 @@ char *leef_addr_to_string(uint32_t addr)
 }
 
 uint32_t leef_get_ticks() {
-    static struct timeval tv;
     static unsigned long firstTick = 0;
+    struct timeval tv;
     gettimeofday(&tv, 0);
     if(!firstTick)
         firstTick = tv.tv_sec;

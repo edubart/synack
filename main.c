@@ -325,6 +325,8 @@ int main(int argc, char **argv)
     signal(SIGHUP, &signal_handler);
     signal(SIGKILL, &signal_handler);
 
+    leef_get_ticks();
+
     if(argc < 5) {
         printf("Usage: %s <interface ip> <host> <port> <interval> [attack type] [options]\n", argv[0]);
         printf("Attack types:\n");
