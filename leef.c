@@ -343,16 +343,22 @@ const char *leef_name_tcp_flags(struct leef_sniffed_packet *packet)
 
 uint32_t leef_resolve_hostname(const char *hostname)
 {
-    unsigned long addr;
     struct hostent *he;
     he = gethostbyname(hostname);
-    if(!he) {
-        if((addr = inet_addr(hostname)) == (unsigned long)-1)
-            return 0;
-    } else {
-        addr = *(unsigned long *)he->h_addr;
+    if(!he)
+        return leef_string_to_addr(hostname);
+    else {
+        uint32_t addr = *(uint32_t *)he->h_addr;
+        return addr;
     }
-    return addr;
+}
+
+uint32_t leef_string_to_addr(const char *str)
+{
+    in_addr_t addr;
+    if((addr = inet_addr(str)) == (unsigned long)-1)
+        return 0;
+    return (uint32_t)addr;
 }
 
 char *leef_addr_to_string(uint32_t addr)

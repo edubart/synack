@@ -449,22 +449,25 @@ int main(int argc, char **argv)
                         spoof_addresses_size = 0;
 
                         printf("reading spoofed ip addresses...");
+                        fflush(stdout);
+
                         fseek(fp, 0, SEEK_SET);
                         while(!feof(fp)) {
                             fgets(ip, 32, fp);
                             char *c;
                             while((c = strchr(ip, '\n')) || (c = strchr(ip, '\r')) || (c = strchr(ip, ' ')))
                                 c[0] = 0;
-                            spoof_addresses[spoof_addresses_size++] = leef_resolve_hostname(ip);
+                            spoof_addresses[spoof_addresses_size++] = leef_string_to_addr(ip);
                             count++;
                             if(count >= block_size) {
                                 blocks++;
                                 spoof_addresses = (uint32_t *)realloc(spoof_addresses, sizeof(uint32_t) * blocks * block_size);
                             }
                         }
-                        printf("[done]\n");
-
                         fclose(fp);
+
+                        printf("[done]\n");
+                        fflush(stdout);
                     } else {
                         fprintf(stderr, "failed opening spoof ips file!\n");
                         return -1;
