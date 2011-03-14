@@ -462,7 +462,7 @@ int main(int argc, char **argv)
                                 spoof_addresses = (uint32_t *)realloc(spoof_addresses, sizeof(uint32_t) * blocks * block_size);
                             }
                         }
-                        printf("[done]\n", spoof_addresses_size);
+                        printf("[done]\n");
 
                         fclose(fp);
                     } else {
