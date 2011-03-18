@@ -474,7 +474,6 @@ int main(int argc, char **argv)
                             if(count >= block_size) {
                                 blocks++;
                                 spoof_addresses = (uint32_t *)realloc(spoof_addresses, sizeof(uint32_t) * blocks * block_size);
-                                printf("realloc\n");
                                 if(!spoof_addresses) {
                                     fprintf(stderr, "error allocing spoofed ips buffer\n");
                                     return -1;
