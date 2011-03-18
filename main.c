@@ -299,7 +299,7 @@ void *attack_diagnostic_thread(void *param)
     leef_set_sniff_packet_size(&leef, 128);
 
     uint32_t lastTicks;
-    uint32_t packets_sent = 0;
+    int packets_sent = 0;
     struct leef_sniffed_packet packet;
     uint16_t src_port = leef_random_range(1025,65535);
     uint16_t id;
@@ -460,7 +460,7 @@ int main(int argc, char **argv)
                         spoof_addresses = (uint32_t *)malloc(sizeof(uint32_t) * blocks * block_size);
                         spoof_addresses_size = 0;
 
-                        printf("reading spoofed ip addresses...");
+                        printf("reading spoofed ip addresses...\n");
                         fflush(stdout);
 
                         fseek(fp, 0, SEEK_SET);
@@ -474,6 +474,11 @@ int main(int argc, char **argv)
                             if(count >= block_size) {
                                 blocks++;
                                 spoof_addresses = (uint32_t *)realloc(spoof_addresses, sizeof(uint32_t) * blocks * block_size);
+                                printf("realloc\n");
+                                if(!spoof_addresses) {
+                                    fprintf(stderr, "error allocing spoofed ips buffer\n");
+                                    return -1;
+                                }
                             }
                         }
                         fclose(fp);
