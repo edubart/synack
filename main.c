@@ -299,7 +299,7 @@ void *attack_diagnostic_thread(void *param)
     leef_set_sniff_packet_size(&leef, 128);
 
     uint32_t lastTicks;
-    int packets_sent = 0;
+    uint32_t packets_sent = 0;
     struct leef_sniffed_packet packet;
     uint16_t src_port = leef_random_range(1025,65535);
     uint16_t id;
