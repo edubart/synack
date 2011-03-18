@@ -453,34 +453,36 @@ int main(int argc, char **argv)
                     FILE *fp = fopen(argv[++arg], "r");
                     if(fp) {
                         char ip[32];
-                        int blocks = 1;
-                        int count = 0;
-                        const int block_size = 16384;
-
-                        spoof_addresses = (uint32_t *)malloc(sizeof(uint32_t) * blocks * block_size);
-                        spoof_addresses_size = 0;
+                        int ch;
 
                         printf("reading spoofed ip addresses...\n");
                         fflush(stdout);
 
+                        spoof_addresses_size = 0;
+
                         fseek(fp, 0, SEEK_SET);
+                        while((ch = fgetc(fp)) != EOF)
+                            if(ch == '\n')
+                                spoof_addresses_size++;
+
+                        printf("%d\n", spoof_addresses_size);
+                        spoof_addresses = (uint32_t *)malloc(spoof_addresses_size * 4);
+
+                        fseek(fp, 0, SEEK_SET);
+
+                        ch = 0;
                         while(!feof(fp)) {
                             fgets(ip, 32, fp);
                             char *c;
                             while((c = strchr(ip, '\n')) || (c = strchr(ip, '\r')) || (c = strchr(ip, ' ')))
                                 c[0] = 0;
-                            spoof_addresses[spoof_addresses_size++] = leef_string_to_addr(ip);
-                            count++;
-                            if(count >= block_size) {
-                                blocks++;
-                                spoof_addresses = (uint32_t *)realloc(spoof_addresses, sizeof(uint32_t) * blocks * block_size);
-                                if(!spoof_addresses) {
-                                    fprintf(stderr, "error allocing spoofed ips buffer\n");
-                                    return -1;
-                                }
-                            }
+                            uint32_t addr = leef_string_to_addr(ip);
+                            if(addr != 0)
+                                spoof_addresses[ch++] = addr;
                         }
                         fclose(fp);
+
+                        spoof_addresses_size = ch;
                     } else {
                         fprintf(stderr, "failed opening spoof ips file!\n");
                         return -1;
