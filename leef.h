@@ -92,4 +92,9 @@ uint8_t leef_random_byte();
 uint16_t leef_random_u16();
 uint32_t leef_random_u32();
 
+int64_t leef_proc_read_int(const char *path);
+int64_t leef_if_tx_packets(const char *devname);
+int64_t leef_if_tx_bytes(const char *devname);
+uint32_t leef_if_ipv4(const char *devname);
+
 #endif

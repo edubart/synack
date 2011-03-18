@@ -400,6 +400,44 @@ uint16_t leef_random_u16() {
     return (uint16_t)(rand() % (1 << 16));
 }
 
-uint32_t leef_random_u32(){
+uint32_t leef_random_u32() {
     return (uint32_t)(leef_random_u16() << 16 | leef_random_u16());
+}
+
+int64_t leef_proc_read_int64(const char *path)
+{
+    FILE *fp = fopen(path, "r");
+    char buf[32];
+    if(fp) {
+        fgets(buf, 32, fp);
+        fclose(fp);
+        return atoll(buf);
+    }
+    return -1;
+}
+
+int64_t leef_if_tx_packets(const char *devname)
+{
+    char path[128];
+    sprintf(path, "/sys/class/net/%s/statistics/tx_packets", devname);
+    return leef_proc_read_int64(path);
+}
+
+int64_t leef_if_tx_bytes(const char *devname)
+{
+    char path[128];
+    sprintf(path, "/sys/class/net/%s/statistics/tx_bytes", devname);
+    return leef_proc_read_int64(path);
+}
+
+uint32_t leef_if_ipv4(const char *devname)
+{
+    int fd;
+    struct ifreq ifr;
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    ifr.ifr_addr.sa_family = AF_INET;
+    strncpy(ifr.ifr_name, devname, IFNAMSIZ-1);
+    ioctl(fd, SIOCGIFADDR, &ifr);
+    close(fd);
+    return *(uint32_t *)(&((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
 }
