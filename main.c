@@ -465,7 +465,6 @@ int main(int argc, char **argv)
                             if(ch == '\n')
                                 spoof_addresses_size++;
 
-                        printf("%d\n", spoof_addresses_size);
                         spoof_addresses = (uint32_t *)malloc(spoof_addresses_size * 4);
 
                         fseek(fp, 0, SEEK_SET);
