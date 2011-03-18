@@ -294,7 +294,7 @@ void *ack_flood_attack_thread(void *param)
 void *attack_diagnostic_thread(void *param)
 {
     struct leef_handle leef;
-    if(!leef_init(&leef, INJECTING))
+    if(!leef_init(&leef, SNIFFING_AND_INJECTING))
         return NULL;
     leef_set_sniff_packet_size(&leef, 128);
 
