@@ -390,8 +390,6 @@ int main(int argc, char **argv)
 {
     signal(SIGTERM, &signal_handler);
     signal(SIGINT, &signal_handler);
-    signal(SIGHUP, &signal_handler);
-    signal(SIGKILL, &signal_handler);
 
     if(argc < 4) {
         printf("Usage: %s <interface> <host> <port> [attack type] [options]\n", argv[0]);
