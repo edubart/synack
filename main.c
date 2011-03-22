@@ -566,6 +566,7 @@ int main(int argc, char **argv)
             }
             printf("TCP PING %s:%d\n", leef_addr_to_string(dest_addr), dest_port);
             tcp_ping_thread();
+            num_threads = 0;
             break;
         case CONN_FLOOD:
             if(dest_port == 0) {
