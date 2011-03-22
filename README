@@ -6,3 +6,9 @@ ABOUT
 
 AUTHORS
   edubart   - https://github.com/edubart
+
+USAGE
+  Your might want to add the following iptables rules to prevent the kernel saboting connection attacks:
+    iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
+
+

