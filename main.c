@@ -391,7 +391,7 @@ void print_help(char **argv)
     printf("  -t [time]         - Ru time in seconds (default: infinite)\n");
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
     printf("  -s [ip]           - Use a custom source address\n");
-    printf("  -H                - Print this help\n");
+    printf("  --help            - Print this help\n");
     printf("Connection flood options:\n");
     printf("  -d [binary file]  - Send binary file as data\n");
     printf("SYN/ACK flood options:\n");
@@ -528,21 +528,21 @@ int main(int argc, char **argv)
                     }
                     break;
                 }
-                case 'H':
-                    print_help(argv);
-                    return 0;
                 default:
-                    printf("incorrect option %s, -H for help\n", opt);
+                    fprintf(stderr, "incorrect option %s, see --help\n", opt);
                     return -1;
             }
+        } else if(strncmp(opt, "--help", 6) == 0) {
+            print_help(argv);
+            return 0;
         } else {
-            printf("incorrect option %s, -H for help\n", opt);
+            fprintf(stderr, "incorrect option %s, see --help\n", opt);
             return -1;
         }
     }
 
     if(dest_addr == 0) {
-        fprintf(stderr, "please specify a target host, -H for help\n");
+        fprintf(stderr, "please specify a target host, see --help\n");
         return -1;
     }
 
