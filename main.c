@@ -234,7 +234,7 @@ void interface_tx_thread()
     }
 
     printf("--- %s:%d flood statistics ---\n", leef_addr_to_string(dest_addr), dest_port);
-    printf("%llu packets sent, %.04f GB sent\n",
+    printf("%lld packets sent, %.04f GB sent\n",
         leef_if_tx_packets(interface) - initialTxPackets,
         (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
 }
