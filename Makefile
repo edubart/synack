@@ -4,8 +4,9 @@ OBJS=${SRCS:.c=.o}
 CCFLAGS=-Wall -O2 -D_REENTRANT
 LDFLAGS=-s
 LIBS=-lpthread
+prefix=/usr/local
 
-.PHONY: all clean distclean
+.PHONY: all clean distclean install
 all: ${TARGET}
 
 ${TARGET}: ${OBJS}
@@ -18,3 +19,6 @@ clean:
 	-rm -f *.o ${TARGET}
 
 distclean: clean
+
+install:
+	install -m 0755 synack $(prefix)/bin
