@@ -299,7 +299,7 @@ void interface_tx_thread()
 
     /* print stastistics */
     printf("\n--- %s TX statistics ---\n", interface);
-    printf("%lld packets sent, %.04f GB sent\n",
+    printf("%lld packets sent, %.02f MB sent\n",
            (long long)(leef_if_tx_packets(interface) - initialTxPackets),
            (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
 }
