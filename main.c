@@ -388,7 +388,7 @@ void print_help(char **argv)
     printf("  -i [interface]    - Which interface to do the action (required)\n");
     printf("  -h [host]         - Target host (required)\n");
     printf("  -p [port]         - Target port (default: random)\n");
-    printf("  -t [time]         - Ru time in seconds (default: infinite)\n");
+    printf("  -t [time]         - Run time in seconds (default: infinite)\n");
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
     printf("  -s [ip]           - Use a custom source address\n");
     printf("  --help            - Print this help\n");
