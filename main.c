@@ -80,11 +80,11 @@ void *conn_flood_attack_thread(void *param)
     return NULL;
 }
 
-void *conn_flood_sniff_thread(void *param)
+void conn_flood_sniff_thread()
 {
     struct leef_handle leef;
     if(!leef_init(&leef, SNIFFING_AND_INJECTING))
-        return NULL;
+        return;
     leef_set_sniff_packet_size(&leef, 64);
 
     uint16_t src_port;
@@ -201,7 +201,6 @@ void *conn_flood_sniff_thread(void *param)
     printf("\n");
 
     leef_terminate(&leef);
-    return NULL;
 }
 
 /* calculate interface TX */
@@ -393,7 +392,7 @@ void print_help(char **argv)
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
     printf("  -s [ip]           - Use a custom source address\n");
     printf("  -H                - Print this help\n");
-    printf("Connection flood options:");
+    printf("Connection flood options:\n");
     printf("  -d [binary file]  - Send binary file as data\n");
     printf("SYN/ACK flood options:\n");
     printf("  -m [threads]      - Number of send threads (default: 1)\n");
@@ -537,7 +536,7 @@ int main(int argc, char **argv)
                     return -1;
             }
         } else {
-            printf("incorrect option %s\n", opt);
+            printf("incorrect option %s, -H for help\n", opt);
             return -1;
         }
     }
@@ -580,7 +579,7 @@ int main(int argc, char **argv)
             printf("CONNECTION FLOOD %s:%d\n", leef_addr_to_string(dest_addr), dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, conn_flood_attack_thread, NULL);
-            conn_flood_sniff_thread(NULL);
+            conn_flood_sniff_thread();
             break;
         case SYN_FLOOD:
             printf("SYN FLOOD %s:%d\n", leef_addr_to_string(dest_addr), dest_port);
