@@ -434,7 +434,7 @@ void tcp_ping_thread()
     if(!quiet) printf("%d packets sent, %d packets received, %.02f%% packet loss\n",
            sent,
            received,
-           sent > 0 ? (sent - received)/(float)sent : .0f);
+           sent > 0 ? ((sent - received)*100.0f)/(float)sent : .0f);
     if(received > 0) {
         if(!quiet) printf("rtt min/avr/max = %d/%d/%d ms\n",
                min_rtt,
