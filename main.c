@@ -37,6 +37,7 @@ uint32_t *spoof_addresses = NULL;
 uint32_t spoof_addresses_size = 0;
 uint8_t *send_data = NULL;
 int send_data_size = 0;
+int quiet = 0;
 
 
 /* handle term signals */
@@ -132,7 +133,7 @@ void conn_flood_sniff_thread()
             if(!running || (run_time > 0 && ticksNow >= run_time))
                 break;
 
-            printf("SYN=%d/s SA=%d/s RA=%d/s FA=%d/s NEW=%d/s FAIL=%d/s ALIVE=%d TX=%.02f Kbps\n",
+            if(!quiet) printf("SYN=%d/s SA=%d/s RA=%d/s FA=%d/s NEW=%d/s FAIL=%d/s ALIVE=%d TX=%.02f Kbps\n",
                    syn_sent,
                    synack_received,
                    rst_received,
@@ -205,7 +206,7 @@ void conn_flood_sniff_thread()
                 } else if(packet.in_ip.tcp->rst == 1) {
                     static int warned = 0;
                     if(!warned && rst_received >= 0) {
-                        printf("host started rejecting connections\n");
+                        if(!quiet) printf("host started rejecting connections\n");
                         fflush(stdout);
                         warned = 1;
                     }
@@ -220,7 +221,7 @@ void conn_flood_sniff_thread()
                 } else if(packet.in_ip.tcp->fin == 1) {
                     static int warned = 0;
                     if(!warned && fin_received == 0) {
-                        printf("host started ending connections, guessed connection timeout: %d secs\n",
+                        if(!quiet) printf("host started ending connections, guessed connection timeout: %d secs\n",
                                leef_get_ticks() / 1000);
                         fflush(stdout);
                         warned = 1;
@@ -252,8 +253,8 @@ void conn_flood_sniff_thread()
     }
 
     double connections_fail = total_syn_sent > 0 ? ((total_syn_sent-total_new_connections) * 100.0)/(double)total_syn_sent : .0;
-    printf("\n--- %s:%d connection flood statistics ---\n",  hostname, dest_port);
-    printf("%lld SYN sent, %lld ACK sent\n"
+    if(!quiet) printf("\n--- %s:%d connection flood statistics ---\n",  hostname, dest_port);
+    if(!quiet) printf("%lld SYN sent, %lld ACK sent\n"
            "%lld SA received, %lld RA received, %lld FA received\n"
            "%lld connection made, %lld connections failed, %.02f%% connections failed\n"
            "%d connections still alive\n"
@@ -286,7 +287,7 @@ void interface_tx_thread()
         if(ticksNow - lastTicks >= 1000) {
             txPackets = leef_if_tx_packets(interface);
             txBytes = leef_if_tx_bytes(interface);
-            printf("%s TX: %d pkt/s, %.02f Mbps\n",
+            if(!quiet) printf("%s TX: %d pkt/s, %.02f Mbps\n",
                    interface,
                    (int)(txPackets - lastTxPackets),
                    ((txBytes - lastTxBytes)*8)/1000000.0);
@@ -298,8 +299,8 @@ void interface_tx_thread()
     }
 
     /* print stastistics */
-    printf("\n--- %s TX statistics ---\n", interface);
-    printf("%lld packets sent, %.02f MB sent\n",
+    if(!quiet) printf("\n--- %s TX statistics ---\n", interface);
+    if(!quiet) printf("%lld packets sent, %.02f MB sent\n",
            (long long)(leef_if_tx_packets(interface) - initialTxPackets),
            (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
 }
@@ -414,7 +415,7 @@ void tcp_ping_thread()
                 /* got a ping reply */
                 if(ping_ports[packet.in_ip.tcp->dest] != 0) {
                     rtt = (leef_get_ticks() - ping_ports[packet.in_ip.tcp->dest]);
-                    printf("port=%d flags=%s rrt=%d ms\n",
+                    if(!quiet) printf("port=%d flags=%s rrt=%d ms\n",
                            dest_port,
                            leef_name_tcp_flags(&packet),
                            rtt);
@@ -429,13 +430,13 @@ void tcp_ping_thread()
     }
 
     /* print stastistics */
-    printf("\n--- %s:%d ping statistics ---\n", hostname, dest_port);
-    printf("%d packets sent, %d packets received, %.02f%% packet loss\n",
+    if(!quiet) printf("\n--- %s:%d ping statistics ---\n", hostname, dest_port);
+    if(!quiet) printf("%d packets sent, %d packets received, %.02f%% packet loss\n",
            sent,
            received,
            sent > 0 ? (sent - received)/(float)sent : .0f);
     if(received > 0) {
-        printf("rtt min/avr/max = %d/%d/%d ms\n",
+        if(!quiet) printf("rtt min/avr/max = %d/%d/%d ms\n",
                min_rtt,
                (int)(rtt_sum/received),
                max_rtt);
@@ -459,6 +460,7 @@ void print_help(char **argv)
     printf("  -t [time]         - Run time in seconds (default: infinite)\n");
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
     printf("  -s [ip]           - Use a custom source address\n");
+    printf("  -q                - Quiet, don't print statistics output\n");
     printf("  --help            - Print this help\n");
     printf("Connection flood options:\n");
     printf("  -d [binary file]  - Send binary file as data\n");
@@ -537,6 +539,9 @@ int main(int argc, char **argv)
                     break;
                 case 'u':
                     sleep_interval = atoi(argv[++arg]);
+                    break;
+                case 'q':
+                    quiet = 1;
                     break;
                 case 'f': {
                     FILE *fp = fopen(argv[++arg], "r");
@@ -635,7 +640,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "you must specify a target port for this action!\n");
                 return -1;
             }
-            printf("TCP PING %s:%d\n", hostname, dest_port);
+            if(!quiet) printf("TCP PING %s:%d\n", hostname, dest_port);
             tcp_ping_thread();
             num_threads = 0;
             break;
@@ -645,19 +650,19 @@ int main(int argc, char **argv)
                 return -1;
             }
 
-            printf("CONNECTION FLOOD %s:%d\n", hostname, dest_port);
+            if(!quiet) printf("CONNECTION FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, conn_flood_attack_thread, NULL);
             conn_flood_sniff_thread();
             break;
         case SYN_FLOOD:
-            printf("SYN FLOOD %s:%d\n", hostname, dest_port);
+            if(!quiet) printf("SYN FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, syn_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
         case ACK_FLOOD:
-            printf("ACK FLOOD %s:%d\n", hostname, dest_port);
+            if(!quiet) printf("ACK FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, ack_flood_attack_thread, NULL);
             interface_tx_thread();
