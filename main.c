@@ -457,15 +457,23 @@ void tcp_ping_thread()
                 /* got a ping reply */
                 if(ping_ports[packet.in_ip.tcp->dest] != 0) {
                     rtt = (leef_get_ticks() - ping_ports[packet.in_ip.tcp->dest]);
-                    if(!quiet) printf("port=%d flags=%s rrt=%d ms\n",
+                    if(!quiet) printf("port=%d flags=%s ttl=%d size=%d rrt=%d ms\n",
                            dest_port,
                            leef_name_tcp_flags(&packet),
+                           packet.ip->ttl,
+                           packet.ip->tot_len,
                            rtt);
                     ping_ports[packet.in_ip.tcp->dest] = 0;
                     received++;
                     rtt_sum += rtt;
                     min_rtt = MIN(rtt, min_rtt);
                     max_rtt = MAX(rtt, max_rtt);
+                } else {
+                    if(!quiet) printf("DUP! port=%d flags=%s ttl=%d size=%d\n",
+                           dest_port,
+                           leef_name_tcp_flags(&packet),
+                           packet.ip->ttl,
+                           packet.ip->tot_len);
                 }
             }
         }
