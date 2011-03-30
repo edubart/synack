@@ -212,21 +212,24 @@ int leef_sniff_next_packet(struct leef_handle *handle, struct leef_sniffed_packe
         packet->len = htons(packet->ip->tot_len) + (uint16_t)abs((int)(packet->packetbuf - packet->buf));
         if(packet->ip->protocol == IPPROTO_TCP) {
             packet->in_ip.tcp = (struct tcphdr *) ((char *) packet->ip + packet->ip->ihl * 4);
+            packet->in_ip.tcp->source = htons(packet->in_ip.tcp->source);
+            packet->in_ip.tcp->dest = htons(packet->in_ip.tcp->dest);
+            packet->in_ip.tcp->seq = htonl(packet->in_ip.tcp->seq);
+            packet->in_ip.tcp->ack_seq = htonl(packet->in_ip.tcp->ack_seq);
+            packet->in_ip.tcp->window = htons(packet->in_ip.tcp->window);
         } else if(packet->ip->protocol == IPPROTO_UDP) {
             packet->in_ip.udp = (struct udphdr *) ((char *) packet->ip + packet->ip->ihl * 4);
+            packet->in_ip.udp->source = htons(packet->in_ip.udp->source);
+            packet->in_ip.udp->dest = htons(packet->in_ip.udp->dest);
+            packet->in_ip.udp->len = htons(packet->in_ip.udp->len);
+        } else if(packet->ip->protocol == IPPROTO_ICMP) {
+            packet->in_ip.icmp = (struct icmphdr *) ((char *) packet->ip + packet->ip->ihl * 4);
         }
 
         /* convert */
         packet->ip->tot_len = htons(packet->ip->tot_len);
         packet->ip->id = htons(packet->ip->id);
 
-        if(packet->ip->protocol == IPPROTO_TCP) {
-            packet->in_ip.tcp->source = htons(packet->in_ip.tcp->source);
-            packet->in_ip.tcp->dest = htons(packet->in_ip.tcp->dest);
-            packet->in_ip.tcp->seq = htonl(packet->in_ip.tcp->seq);
-            packet->in_ip.tcp->ack_seq = htonl(packet->in_ip.tcp->ack_seq);
-            packet->in_ip.tcp->window = htons(packet->in_ip.tcp->window);
-        }
         return 1;
     }
     return 0;
@@ -321,6 +324,92 @@ int leef_send_raw_tcp(struct leef_handle *handle,
                   sizeof(struct sockaddr));
 }
 
+int leef_send_raw_udp(struct leef_handle *handle,
+                      uint32_t src_addr, uint32_t dest_addr,
+                      uint16_t src_port, uint16_t dest_port,
+                      uint32_t id,
+                      uint16_t frag_off, uint8_t ttl,
+                      uint16_t data_size, uint8_t *data)
+{
+    uint8_t buffer[SEND_BUFFER_SIZE];
+    uint16_t packet_size = sizeof(struct iphdr) + sizeof(struct udphdr) + data_size;
+    struct iphdr ip;
+    struct udphdr udp;
+
+    bzero(&ip, sizeof(struct iphdr));
+    bzero(&udp, sizeof(struct udphdr));
+
+    /* setup ip header */
+    ip.version = 4;
+    ip.ihl = 5;
+    ip.tot_len = htons(packet_size);
+    ip.id = htons(id);
+    ip.frag_off = frag_off; /* don't fragment */
+    ip.ttl = ttl;
+    ip.protocol = IPPROTO_UDP;
+    ip.saddr = src_addr;
+    ip.daddr = dest_addr;
+
+    /* setup udp header */
+    udp.source = htons(src_port);
+    udp.dest = htons(dest_port);
+    udp.len = htons(sizeof(struct udphdr) + data_size);
+
+    /* calculate udp checksum */
+    struct {
+        uint32_t saddr, daddr;
+        uint8_t res;
+        uint8_t proto;
+        uint16_t len;
+    } pseudo;
+
+    pseudo.saddr = ip.saddr;
+    pseudo.daddr = ip.daddr;
+    pseudo.res = 0;
+    pseudo.proto = IPPROTO_UDP;
+    pseudo.len = udp.len;
+
+    memcpy(buffer, &pseudo, sizeof(pseudo));
+    memcpy(buffer + sizeof(pseudo), &udp, sizeof(struct udphdr));
+    memcpy(buffer + sizeof(pseudo) + sizeof(struct udphdr), data, data_size);
+    udp.check = leef_checksum((uint16_t *)buffer, sizeof(pseudo) + sizeof(struct udphdr) + data_size);
+
+    /* build packet buffer and calculate ip checksum */
+    memcpy(buffer, &ip, sizeof(struct iphdr));
+    memcpy(buffer + sizeof(struct iphdr), &udp, sizeof(struct udphdr));
+    memcpy(buffer + sizeof(struct iphdr) + sizeof(struct udphdr), data, data_size);
+    ip.check = leef_checksum((uint16_t *)buffer, packet_size);
+    memcpy(buffer, &ip, sizeof(struct iphdr));
+
+    /* send the packet */
+    struct sockaddr_in sktsin;
+    sktsin.sin_addr.s_addr = dest_addr;
+    sktsin.sin_family = AF_INET;
+    sktsin.sin_port = 0;
+    return sendto(handle->send_socket,
+                  buffer, packet_size,
+                  0,
+                  (struct sockaddr *)&sktsin,
+                  sizeof(struct sockaddr));
+}
+
+int leef_send_udp_data(struct leef_handle *handle,
+                      uint32_t src_addr, uint32_t dest_addr,
+                      uint16_t src_port, uint16_t dest_port,
+                      uint32_t id,
+                      uint16_t data_size, uint8_t *data)
+{
+    static uint8_t typical_ttls[] = {64, 128};
+    uint8_t ttl = typical_ttls[rand() % sizeof(typical_ttls)] - (rand() % 5);
+    uint16_t frag_off = 0x40; /* don't fragment */
+    return leef_send_raw_udp(handle,
+                      src_addr, dest_addr,
+                      src_port, dest_port,
+                      id,
+                      frag_off, ttl,
+                      data_size, data);
+}
+
 int leef_send_raw_tcp2(struct leef_handle *handle,
                        uint32_t src_addr, uint32_t dest_addr,
                        uint16_t src_port, uint16_t dest_port,
@@ -331,7 +420,7 @@ int leef_send_raw_tcp2(struct leef_handle *handle,
     static uint16_t typical_windows[] = {5840, 8192, 16384, 65535};
     static uint8_t typical_ttls[] = {64, 128};
 
-    uint8_t ttl = typical_ttls[rand() % sizeof(typical_ttls)] - (rand() % 10);
+    uint8_t ttl = typical_ttls[rand() % sizeof(typical_ttls)] - (rand() % 5);
     uint16_t window = typical_windows[rand() % (sizeof(typical_windows) / 2)];
     uint16_t frag_off = 0x40; /* don't fragment */
 
@@ -354,7 +443,7 @@ int leef_send_tcp_syn(struct leef_handle *handle,
     static uint16_t typical_windows[] = {5840, 8192, 16384, 65535};
     static uint8_t typical_ttls[] = {64, 128};
 
-    uint8_t ttl = typical_ttls[rand() % sizeof(typical_ttls)] - (rand() % 10);
+    uint8_t ttl = typical_ttls[rand() % sizeof(typical_ttls)] - (rand() % 5);
     uint16_t window = typical_windows[rand() % (sizeof(typical_windows) / 2)];
     uint16_t frag_off = 0x40; /* don't fragment */
 
@@ -520,3 +609,4 @@ uint32_t leef_if_ipv4(const char *devname)
     close(fd);
     return *(uint32_t *)(&((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
 }
+

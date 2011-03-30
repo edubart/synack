@@ -10,6 +10,7 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#include <netinet/ip_icmp.h>
 
 #define LINK_ETHERNET       1
 #define LINK_PPP            2
@@ -44,6 +45,7 @@ struct leef_sniffed_packet
     union {
         struct tcphdr *tcp;
         struct udphdr *udp;
+        struct icmphdr *icmp;
     } in_ip;
     struct iphdr *ip;
     uint16_t len;
@@ -95,6 +97,18 @@ int leef_send_tcp_ack(struct leef_handle *handle,
                       uint32_t src_addr, uint32_t dest_addr,
                       uint16_t src_port, uint16_t dest_port,
                       uint32_t id, uint32_t seq, uint32_t ack_seq);
+
+int leef_send_raw_udp(struct leef_handle *handle,
+                      uint32_t src_addr, uint32_t dest_addr,
+                      uint16_t src_port, uint16_t dest_port,
+                      uint32_t id,
+                      uint16_t frag_off, uint8_t ttl,
+                      uint16_t data_size, uint8_t *data);
+int leef_send_udp_data(struct leef_handle *handle,
+                      uint32_t src_addr, uint32_t dest_addr,
+                      uint16_t src_port, uint16_t dest_port,
+                      uint32_t id,
+                      uint16_t data_size, uint8_t *data);
 
 const char *leef_name_tcp_flags(struct leef_sniffed_packet *packet);
 uint32_t leef_resolve_hostname(const char *hostname);

