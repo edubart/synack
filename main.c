@@ -200,7 +200,7 @@ void conn_flood_sniff_thread()
                                            TCP_ACK | TCP_PUSH,
                                            additional_data_size,
                                            additional_data);
-                        tx_bytes += 54 + send_data_size;
+                        tx_bytes += 54 + additional_data_size;
                     } else {
                         leef_send_tcp_ack(&leef,
                                           interface_addr, dest_addr,
