@@ -13,17 +13,19 @@
 #include <sys/time.h>
 #include <pthread.h>
 
-#define TCP_PING   0
-#define CONN_FLOOD 1
-#define SYN_FLOOD  2
-#define ACK_FLOOD  3
-#define UDP_FLOOD  4
-#define MIX_FLOOD  5
-#define MIX2_FLOOD 6
-#define PUSH_FLOOD 7
-
 #define MAX(a,b) (a > b ? a : b)
 #define MIN(a,b) (a < b ? a : b)
+
+enum e_action {
+    TCP_PING,
+    CONN_FLOOD,
+    SYN_FLOOD,
+    ACK_FLOOD,
+    UDP_FLOOD,
+    MIX_FLOOD,
+    MIX2_FLOOD,
+    PA_FLOOD
+};
 
 /* global variables */
 int running = 1;
@@ -45,12 +47,6 @@ int quiet = 0;
 int use_tcp_options = 0;
 int fill_data_with_random = 0;
 
-
-/* handle term signals */
-void signal_handler(int sig) {
-    running = 0;
-}
-
 uint8_t *get_send_data()
 {
     int i;
@@ -64,7 +60,6 @@ uint8_t *get_send_data()
     return NULL;
 }
 
-/* spoofing utilities */
 uint32_t get_src_ip()
 {
     if(spoof_addresses_size > 0) {
@@ -78,7 +73,7 @@ uint32_t get_src_ip()
     return interface_addr;
 }
 
-/* Connection flood */
+/* Connection flood send thread */
 void *conn_flood_attack_thread(void *param)
 {
     struct leef_handle leef;
@@ -108,6 +103,7 @@ void *conn_flood_attack_thread(void *param)
     return NULL;
 }
 
+/* Connection flood sniff thread */
 void conn_flood_sniff_thread()
 {
     struct leef_handle leef;
@@ -470,8 +466,8 @@ void *mix2_flood_attack_thread(void *param)
     return NULL;
 }
 
-/* PUSH flood */
-void *push_flood_attack_thread(void *param)
+/* PA flood */
+void *pa_flood_attack_thread(void *param)
 {
     struct leef_handle leef;
     if(!leef_init(&leef, INJECTING))
@@ -596,10 +592,10 @@ void print_help(char **argv)
     printf("  -C                - Connection flood\n");
     printf("  -S                - SYN flood\n");
     printf("  -A                - ACK flood\n");
+    printf("  -D                - PA flood\n");
     printf("  -M                - Mixed S/A/PA/FA flood\n");
     printf("  -N                - Mixed A/PA/FA flood\n");
     printf("  -U                - UDP flood\n");
-    printf("  -D                - ACK+PUSH flood\n");
     printf("General options:\n");
     printf("  -i [interface]    - Which interface to do the action (required)\n");
     printf("  -h [host]         - Target host (required)\n");
@@ -608,12 +604,16 @@ void print_help(char **argv)
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
     printf("  -b [bytes]        - Additional random bytes to send as data (default: 0)\n");
     printf("  -m [threads]      - Number of send threads (default: 1)\n");
+    printf("  -s [ip]           - Use a custom source address (default: interface ip)\n");
     printf("  -d [binary file]  - Send binary file as data\n");
-    printf("  -s [ip]           - Use a custom source address\n");
     printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
-    printf("  -q                - Quiet, don't print statistics output\n");
     printf("  -o                - Enable tcp options on SYN packets\n");
+    printf("  -q                - Quiet, don't print statistics output\n");
     printf("  --help            - Print this help\n");
+}
+
+void signal_handler(int sig) {
+    running = 0;
 }
 
 int main(int argc, char **argv)
@@ -661,7 +661,7 @@ int main(int argc, char **argv)
                     action = UDP_FLOOD;
                     break;
                 case 'D':
-                    action = PUSH_FLOOD;
+                    action = PA_FLOOD;
                     break;
                 case 'i':
                     interface = argv[++arg];
@@ -851,10 +851,10 @@ int main(int argc, char **argv)
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, mix2_flood_attack_thread, NULL);
             interface_tx_thread();
-        case PUSH_FLOOD:
-            if(!quiet) printf("PUSH FLOOD %s:%d\n", hostname, dest_port);
+        case PA_FLOOD:
+            if(!quiet) printf("PA FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
-                pthread_create(&threads[i], NULL, push_flood_attack_thread, NULL);
+                pthread_create(&threads[i], NULL, pa_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
     }

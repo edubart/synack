@@ -1,11 +1,10 @@
 ABOUT
-  Tool used for flooding TCP services with the 3-way TCP handshake causing
-  massive amount of connections on the host, exhausting it's resources and
-  leading to DOS(Denial of Service). Created for educational and testing
-  purposes.
+  Tool created for testing DDOS/DOS attacks. Supports SYN, UDP, TCP connection,
+  ACK, PUSH+ACK and mixed floods. Created FOR EDUCATIONAL AND TESTING purposes
+  only.
 
-AUTHORS
-  edubart   - https://github.com/edubart
+AUTHOR
+  edubart - https://github.com/edubart
 
 INSTALL
   Installation steps:
@@ -13,8 +12,67 @@ INSTALL
     $ make
     $ sudo make install
 
-USAGE
-  Your might want to add the following iptables rule to prevent the kernel saboting connection attacks:
-    $ iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
-  For using it see the --help.
+FLOODS DESCRIPTION
+  TCP Ping
+    Ping a TCP port by seding simple SYN packet, option created
+    just to see the target responsiveness.
 
+  Connection flood 
+    Flood TCP services with the 3-way TCP handshake causing
+    massive amount of connections on the host, exhausting it's resources
+    and then preventing new connections.
+
+    NOTE: If you use this attack, you MUST add the following iptables
+    rule to prevent your kernel saboting the attack, otherwise your
+    kernel will close all established connections:
+      iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
+
+    NOTE: Spoofing can't be used with this attack.
+
+    NOTE: If you are behind a router, make sure it can handle massive amount
+    of connections, usually home user routers can't, so you might wan't to
+    connect directly if possible. By directly I mean assigning your public IP
+    directly to your interface.
+
+  SYN, UDP floods
+    Well known flood types
+
+  ACK, PA, Mixed S/A/PA/FA and Mixed A/PA/FA floods
+    Uncommon flood types created for testing purposes
+
+    NOTE:
+      PA = TCP with flags PUSH+ACK set
+      FA = TCP with flags FIN+ACK set
+      S = TCP with flag SYN set
+      A = TCP with flag ACK set
+
+
+  NOTE: All flood statics are read from the interface TX, so synack
+  doesn't report really only the flood traffic, instead it reports
+  all your interface output traffic.
+
+USAGE
+  synack -i <interface> -h <host> [action] [options]
+  Actions:
+    -P                - TCP ping (default action)                                                                                                                                                                          
+    -C                - Connection flood                                                                                                                                                                                   
+    -S                - SYN flood                                                                                                                                                                                          
+    -A                - ACK flood                                                                                                                                                                                          
+    -D                - PA flood                                                                                                                                                                                           
+    -M                - Mixed S/A/PA/FA flood                                                                                                                                                                              
+    -N                - Mixed A/PA/FA flood                                                                                                                                                                                
+    -U                - UDP flood                                                                                                                                                                                          
+  General options:                                                                                                                                                                                                         
+    -i [interface]    - Which interface to do the action (required)                                                                                                                                                        
+    -h [host]         - Target host (required)                                                                                                                                                                             
+    -p [port]         - Target port (default: random)                                                                                                                                                                      
+    -t [time]         - Run time in seconds (default: infinite)                                                                                                                                                            
+    -u [interval]     - Sleep interval in microseconds (default: 10000)                                                                                                                                                    
+    -b [bytes]        - Additional random bytes to send as data (default: 0)                                                                                                                                               
+    -m [threads]      - Number of send threads (default: 1)                                                                                                                                                        
+    -s [ip]           - Use a custom source address (default: interface ip)                                                                                                                                                        
+    -d [binary file]  - Send binary file as data                                                                                                                                                                                                   
+    -f [text file]    - Read a list of IPs from a text file for spoofing                                                                                                                                                          
+    -o                - Enable tcp options on SYN packets                                                                                                                                                           
+    -q                - Quiet, don't print statistics output                                                                                                                                                               
+    --help            - Print this help
