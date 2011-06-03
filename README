@@ -48,7 +48,7 @@ FLOODS DESCRIPTION
       A = TCP with flag ACK set
 
 
-  NOTE: All flood statics are read from the interface TX, so synack
+  NOTE: All flood statistics are read from the interface TX, so synack
   doesn't report really only the flood traffic, instead it reports
   all your interface output traffic.
 

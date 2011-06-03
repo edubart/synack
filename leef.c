@@ -22,7 +22,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_fddi.h>
 
-int leef_adjust_sniffed_packet_buffer(struct leef_sniffed_packet *packet)
+int leef_adjust_sniffed_packet_buffer(leef_sniffed_packet *packet)
 {
     switch(packet->linktype) {
         case LINK_ETHERNET:
@@ -170,7 +170,7 @@ void leef_set_sniff_packet_size(struct leef_handle *handle, int size)
     handle->sniff_size = size;
 }
 
-int leef_sniff_next_packet(struct leef_handle *handle, struct leef_sniffed_packet *packet)
+int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *packet)
 {
     socklen_t fromlen = sizeof(struct sockaddr_ll);
     struct sockaddr_ll fromaddr;
@@ -489,7 +489,7 @@ int leef_send_tcp_ack(struct leef_handle *handle,
                               0, NULL);
 }
 
-const char *leef_name_tcp_flags(struct leef_sniffed_packet *packet)
+const char *leef_name_tcp_flags(leef_sniffed_packet *packet)
 {
     static char name[8];
     int pos = 0;

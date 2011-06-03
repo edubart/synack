@@ -40,8 +40,7 @@ enum e_tcp_flags {
     TCP_URG     = 0x20
 };
 
-struct leef_sniffed_packet
-{
+typedef struct {
     union {
         struct tcphdr *tcp;
         struct udphdr *udp;
@@ -53,7 +52,7 @@ struct leef_sniffed_packet
     uint8_t type;
     uint8_t buf[SNIFF_BUFFER_SIZE];
     uint8_t *packetbuf;
-};
+} leef_sniffed_packet;
 
 struct leef_handle
 {
@@ -72,7 +71,7 @@ int leef_init(struct leef_handle *handle, int init_flags);
 void leef_terminate(struct leef_handle *handle);
 
 void leef_set_sniff_packet_size(struct leef_handle *handle, int size);
-int leef_sniff_next_packet(struct leef_handle *handle, struct leef_sniffed_packet *packet);
+int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *packet);
 
 int leef_send_raw_tcp(struct leef_handle *handle,
                       uint32_t src_addr, uint32_t dest_addr,
@@ -110,7 +109,7 @@ int leef_send_udp_data(struct leef_handle *handle,
                       uint32_t id,
                       uint16_t data_size, uint8_t *data);
 
-const char *leef_name_tcp_flags(struct leef_sniffed_packet *packet);
+const char *leef_name_tcp_flags(leef_sniffed_packet *packet);
 uint32_t leef_resolve_hostname(const char *hostname);
 uint32_t leef_string_to_addr(const char *str);
 char *leef_addr_to_string(uint32_t addr);

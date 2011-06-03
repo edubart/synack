@@ -130,7 +130,7 @@ void conn_flood_sniff_thread()
     long long total_fin_received = 0;
     long long total_new_connections = 0;
     long long total_tx_bytes = 0;
-    struct leef_sniffed_packet packet;
+    leef_sniffed_packet packet;
     int conn_ports[65536];
 
     memset(conn_ports, 0, sizeof(conn_ports));
@@ -495,7 +495,7 @@ void tcp_ping_thread()
         return;
     leef_set_sniff_packet_size(&leef, 128);
 
-    struct leef_sniffed_packet packet;
+    leef_sniffed_packet packet;
     uint16_t src_port = leef_random_range(1025,65535);
     uint32_t ping_ports[65536];
     uint32_t lastTicks;

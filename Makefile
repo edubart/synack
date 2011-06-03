@@ -21,4 +21,4 @@ clean:
 distclean: clean
 
 install:
-	install -m 4755 synack $(prefix)/bin
+	install -m 4755 ${TARGET} $(prefix)/bin
