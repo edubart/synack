@@ -17,7 +17,7 @@ FLOODS DESCRIPTION
     Ping a TCP port by seding simple SYN packet, option created
     just to see the target responsiveness.
 
-  Connection flood 
+  Connection flood
     Flood TCP services with the 3-way TCP handshake causing
     massive amount of connections on the host, exhausting it's resources
     and then preventing new connections.
@@ -29,8 +29,8 @@ FLOODS DESCRIPTION
 
     NOTE: Spoofing can't be used with this attack.
 
-    NOTE: If you are behind a shared connection with a router as gateway, 
-    make sure that the router can handle massive amount of connections, 
+    NOTE: If you are behind a shared connection with a router as gateway,
+    make sure that the router can handle massive amount of connections,
     usually home user routers can't, so you might wan't to connect directly
     if possible. By directly I mean assigning your public IP directly to
     your interface.
@@ -55,25 +55,25 @@ FLOODS DESCRIPTION
 USAGE
   synack -i <interface> -h <host> [action] [options]
   Actions:
-    -P                - TCP ping (default action)                                                                                                                                                                          
-    -C                - Connection flood                                                                                                                                                                                   
-    -S                - SYN flood                                                                                                                                                                                          
-    -A                - ACK flood                                                                                                                                                                                          
-    -D                - PA flood                                                                                                                                                                                           
-    -M                - Mixed S/A/PA/FA flood                                                                                                                                                                              
-    -N                - Mixed A/PA/FA flood                                                                                                                                                                                
-    -U                - UDP flood                                                                                                                                                                                          
-  General options:                                                                                                                                                                                                         
-    -i [interface]    - Which interface to do the action (required)                                                                                                                                                        
-    -h [host]         - Target host (required)                                                                                                                                                                             
-    -p [port]         - Target port (default: random)                                                                                                                                                                      
-    -t [time]         - Run time in seconds (default: infinite)                                                                                                                                                            
-    -u [interval]     - Sleep interval in microseconds (default: 10000)                                                                                                                                                    
-    -b [bytes]        - Additional random bytes to send as data (default: 0)                                                                                                                                               
-    -m [threads]      - Number of send threads (default: 1)                                                                                                                                                        
-    -s [ip]           - Use a custom source address (default: interface ip)                                                                                                                                                        
-    -d [binary file]  - Send binary file as data                                                                                                                                                                                                   
-    -f [text file]    - Read a list of IPs from a text file for spoofing                                                                                                                                                          
-    -o                - Enable tcp options on SYN packets                                                                                                                                                           
-    -q                - Quiet, don't print statistics output                                                                                                                                                               
-    --help            - Print this help
+      -P                - TCP ping (default action)
+      -C                - Connection flood
+      -S                - SYN flood
+      -A                - ACK flood
+      -D                - PA flood
+      -M                - Mixed S/A/PA/FA flood
+      -N                - Mixed A/PA/FA flood
+      -U                - UDP flood
+  General options:
+      -i [interface]    - Which interface to do the action (required)
+      -h [host]         - Target host (required)
+      -p [port]         - Target port (default: random)
+      -t [time]         - Run time in seconds (default: infinite)
+      -u [interval]     - Sleep interval in microseconds (default: 10000)
+      -b [bytes]        - Additional random bytes to send as data (default: 0)
+      -m [threads]      - Number of send threads (default: 1)
+      -s [ip]           - Use a custom source address (default: interface ip)
+      -d [binary file]  - Send binary file as data
+      -f [text file]    - Read a list of IPs from a text file for spoofing
+      -o                - Enable tcp options on SYN packets
+      -q                - Quiet, don't print statistics output
+      --help            - Print this help
