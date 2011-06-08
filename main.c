@@ -383,7 +383,7 @@ void *mix_flood_attack_thread(void *param)
         return NULL;
 
     while(running) {
-        switch(rand() % 4) {
+        switch(leef_rand() % 4) {
             case 0: /* SYN */
                 leef_send_tcp_syn(&leef,
                                 get_src_ip(), dest_addr,
@@ -429,7 +429,7 @@ void *mix2_flood_attack_thread(void *param)
         return NULL;
 
     while(running) {
-        switch(rand() % 3) {
+        switch(leef_rand() % 3) {
             case 0: /* ACK */
                 leef_send_tcp_ack(&leef,
                                 get_src_ip(), dest_addr,

@@ -29,6 +29,8 @@ struct pseudo_header {
     uint16_t len;
 };
 
+volatile unsigned long leef_next_rand_seed = 1;
+
 int leef_adjust_sniffed_packet_buffer(leef_sniffed_packet *packet)
 {
     switch(packet->linktype) {
@@ -105,20 +107,18 @@ uint16_t leef_get_family_link_type(uint16_t family)
     return result;
 }
 
-uint16_t leef_checksum(uint16_t *ptr, int nbytes)
+uint16_t leef_checksum(register uint16_t *ptr, register int nbytes)
 {
-    uint32_t sum = 0;
+    register uint32_t sum = 0;
     uint16_t oddbyte;
 
     sum = 0;
-    while(nbytes > 1)
-    {
+    while(nbytes > 1) {
         sum += *ptr++;
         nbytes -= 2;
     }
 
-    if(nbytes == 1)
-    {
+    if(nbytes == 1) {
         oddbyte = 0;
         *((uint8_t *) &oddbyte) = *(uint8_t *)ptr;
         sum += oddbyte;
@@ -132,7 +132,11 @@ uint16_t leef_checksum(uint16_t *ptr, int nbytes)
 int leef_init(struct leef_handle *handle, int flags)
 {
     leef_get_ticks();
-    leef_srand();
+
+    /* seed random */
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+    leef_srand((tv.tv_sec * 1000) + (tv.tv_usec / 1000));
 
     handle->send_socket = -1;
     handle->sniff_socket = -1;
@@ -281,7 +285,8 @@ int leef_send_raw_tcp(struct leef_handle *handle,
     if(tcp_options_size > 0)
         memcpy((uint8_t *)tcph + sizeof(struct tcphdr), tcp_options, tcp_options_size);
 
-    memcpy(packet_buff + sizeof(struct iphdr) + sizeof(struct tcphdr) + tcp_options_size, data, data_size);
+    if(data_size > 0)
+        memcpy(packet_buff + sizeof(struct iphdr) + sizeof(struct tcphdr) + tcp_options_size, data, data_size);
 
     /* calculate tcp checksum */
     pseudoh->saddr = src_addr;
@@ -339,7 +344,8 @@ int leef_send_raw_udp(struct leef_handle *handle,
     udph->len = htons(protocol_len);
     udph->check = 0;
 
-    memcpy(packet_buff + sizeof(struct iphdr) + sizeof(struct udphdr), data, data_size);
+    if(data_size > 0)
+        memcpy(packet_buff + sizeof(struct iphdr) + sizeof(struct udphdr), data, data_size);
 
     /* calculate udp checksum */
     pseudoh->saddr = src_addr;
@@ -383,7 +389,7 @@ int leef_send_udp_data(struct leef_handle *handle,
                       uint16_t data_size, uint8_t *data)
 {
     static uint8_t typical_ttls[] = {64, 128};
-    uint8_t ttl = typical_ttls[rand() % sizeof(typical_ttls)] - (rand() % 5);
+    uint8_t ttl = typical_ttls[leef_rand() % sizeof(typical_ttls)] - (leef_rand() % 5);
     uint16_t frag_off = 0x40; /* don't fragment */
     return leef_send_raw_udp(handle,
                       src_addr, dest_addr,
@@ -403,8 +409,8 @@ int leef_send_raw_tcp2(struct leef_handle *handle,
     static uint16_t typical_windows[] = {5840, 8192, 16384, 65535};
     static uint8_t typical_ttls[] = {64, 128};
 
-    uint8_t ttl = typical_ttls[rand() % sizeof(typical_ttls)] - (rand() % 5);
-    uint16_t window = typical_windows[rand() % (sizeof(typical_windows) / 2)];
+    uint8_t ttl = typical_ttls[leef_rand() % sizeof(typical_ttls)] - (rand() % 5);
+    uint16_t window = typical_windows[leef_rand() % (sizeof(typical_windows) / 2)];
     uint16_t frag_off = 0x40; /* don't fragment */
 
     return leef_send_raw_tcp(handle,
@@ -426,8 +432,8 @@ int leef_send_tcp_syn(struct leef_handle *handle,
     static uint16_t typical_windows[] = {5840, 8192, 16384, 65535};
     static uint8_t typical_ttls[] = {64, 128};
 
-    uint8_t ttl = typical_ttls[rand() % sizeof(typical_ttls)] - (rand() % 5);
-    uint16_t window = typical_windows[rand() % (sizeof(typical_windows) / 2)];
+    uint8_t ttl = typical_ttls[leef_rand() % sizeof(typical_ttls)] - (leef_rand() % 5);
+    uint16_t window = typical_windows[leef_rand() % (sizeof(typical_windows) / 2)];
     uint16_t frag_off = 0x40; /* don't fragment */
 
     static uint8_t typical_options[7][12] = {
@@ -444,7 +450,7 @@ int leef_send_tcp_syn(struct leef_handle *handle,
     uint8_t tcp_options_size = 0;
     uint8_t *tcp_options = NULL;
     if(use_tcp_options) {
-        int option_id = rand() % sizeof(typical_options_size);
+        int option_id = leef_rand() % sizeof(typical_options_size);
         tcp_options_size = typical_options_size[option_id];
         tcp_options = typical_options[option_id];
     }
@@ -524,40 +530,6 @@ uint32_t leef_get_ticks() {
     if(!firstTick)
         firstTick = tv.tv_sec;
     return ((tv.tv_sec - firstTick) * 1000) + (tv.tv_usec / 1000);
-}
-
-void leef_srand() {
-    struct timeval tv;
-    gettimeofday(&tv,NULL);
-    srand((tv.tv_sec * 1000) + (tv.tv_usec / 1000));
-}
-
-int leef_random_range(int min, int max) {
-    if(min > max) {
-        int tmp = max;
-        max = min;
-        min = tmp;
-    }
-    double range = max - min + 1;
-    int ret = (min + ((int)((range * rand())/ (RAND_MAX+1.0))));
-    return ret;
-}
-
-uint8_t leef_random_byte() {
-    return (uint8_t)(rand() % (1 << 8));
-}
-
-uint16_t leef_random_u16() {
-    return (uint16_t)(rand() % (1 << 16));
-}
-
-uint32_t leef_random_u32() {
-    return (uint32_t)(leef_random_u16() << 16 | leef_random_u16());
-}
-
-uint16_t leef_random_src_port()
-{
-    return 32769 + (rand() % 28232);
 }
 
 int64_t leef_proc_read_int64(const char *path)

@@ -114,18 +114,40 @@ const char *leef_name_tcp_flags(leef_sniffed_packet *packet);
 uint32_t leef_resolve_hostname(const char *hostname);
 uint32_t leef_string_to_addr(const char *str);
 char *leef_addr_to_string(uint32_t addr);
-
 uint32_t leef_get_ticks();
-void leef_srand();
-int leef_random_range(int min, int max);
-uint8_t leef_random_byte();
-uint16_t leef_random_u16();
-uint32_t leef_random_u32();
-uint16_t leef_random_src_port();
-
 int64_t leef_proc_read_int(const char *path);
 int64_t leef_if_tx_packets(const char *devname);
 int64_t leef_if_tx_bytes(const char *devname);
 uint32_t leef_if_ipv4(const char *devname);
+
+/* fast random implementation */
+#define LEEF_MAX_RAND 65536
+
+extern volatile unsigned long leef_next_rand_seed;
+
+static inline void leef_srand(unsigned long next_rand_seed) {
+    leef_next_rand_seed = next_rand_seed;
+}
+
+static inline int leef_rand() {
+    leef_next_rand_seed = leef_next_rand_seed * 1103515245 + 12345;
+    return ((unsigned)(leef_next_rand_seed/65536) % LEEF_MAX_RAND);
+}
+
+static inline int leef_random_range(int min, int max) {
+    if(min > max) {
+        int tmp = max;
+        max = min;
+        min = tmp;
+    }
+    double range = max - min + 1;
+    int ret = (min + ((int)((range * leef_rand())/ (LEEF_MAX_RAND+1.0))));
+    return ret;
+}
+
+static inline uint8_t leef_random_byte() { return (uint8_t)(leef_rand() % (1 << 8)); }
+static inline uint16_t leef_random_u16() { return (uint16_t)(leef_rand() % (1 << 16)); }
+static inline uint32_t leef_random_u32() { return (uint32_t)(leef_random_u16() << 16 | leef_random_u16()); }
+static inline uint16_t leef_random_src_port() { return 32769 + (leef_rand() % 28232); }
 
 #endif
