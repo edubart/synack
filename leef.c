@@ -22,6 +22,13 @@
 #include <linux/if_ether.h>
 #include <linux/if_fddi.h>
 
+struct pseudo_header {
+    uint32_t saddr, daddr;
+    uint8_t res;
+    uint8_t proto;
+    uint16_t len;
+};
+
 int leef_adjust_sniffed_packet_buffer(leef_sniffed_packet *packet)
 {
     switch(packet->linktype) {
@@ -244,81 +251,68 @@ int leef_send_raw_tcp(struct leef_handle *handle,
                       uint8_t tcp_options_size, uint8_t *tcp_options,
                       uint16_t data_size, uint8_t *data)
 {
-    uint8_t buffer[SEND_BUFFER_SIZE];
+    struct sockaddr_in sktsin;
+    struct pseudo_header *pseudoh = (struct pseudo_header *)(handle->send_buf + sizeof(struct iphdr) - sizeof(struct pseudo_header));
+    struct iphdr *iph = (struct iphdr *)handle->send_buf;
+    struct tcphdr *tcph = (struct tcphdr *)(handle->send_buf + sizeof(struct iphdr));
+    uint8_t *packet_buff = handle->send_buf;
     uint16_t packet_size = sizeof(struct iphdr) + sizeof(struct tcphdr) + tcp_options_size + data_size;
-    struct iphdr ip;
-    struct tcphdr tcp;
+    uint16_t protocol_len = sizeof(struct tcphdr) + tcp_options_size + data_size;
 
-    bzero(&ip, sizeof(struct iphdr));
-    bzero(&tcp, sizeof(struct tcphdr));
 
-    /* setup ip header */
-    ip.version = 4;
-    ip.ihl = 5;
-    ip.tot_len = htons(packet_size);
-    ip.id = htons(id);
-    ip.frag_off = frag_off; /* don't fragment */
-    ip.ttl = ttl;
-    ip.protocol = IPPROTO_TCP;
-    ip.saddr = src_addr;
-    ip.daddr = dest_addr;
+    /* build tcp header */
+    tcph->source = htons(src_port);
+    tcph->dest = htons(dest_port);
+    tcph->seq = htonl(seq);
+    tcph->ack_seq = htonl(ack_seq);
+    tcph->doff = (sizeof(struct tcphdr) + tcp_options_size) / 4;
+    tcph->window = htons(window);
+    tcph->fin = (flags & TCP_FIN) ? 1 : 0;
+    tcph->syn = (flags & TCP_SYN) ? 1 : 0;
+    tcph->rst = (flags & TCP_RST) ? 1 : 0;
+    tcph->psh = (flags & TCP_PUSH) ? 1 : 0;
+    tcph->ack = (flags & TCP_ACK) ? 1 : 0;
+    tcph->urg = (flags & TCP_URG) ? 1 : 0;
+    tcph->res1 = 0;
+    tcph->res2 = 0;
+    tcph->urg_ptr = 0;
+    tcph->check = 0;
 
-    /* setup tcp header */
-    tcp.source = htons(src_port);
-    tcp.dest = htons(dest_port);
-    tcp.seq = htonl(seq);
-    tcp.ack_seq = htonl(ack_seq);
-    tcp.doff = (sizeof(struct tcphdr) + tcp_options_size) / 4;
-    tcp.window = htons(window);
+    if(tcp_options_size > 0)
+        memcpy((uint8_t *)tcph + sizeof(struct tcphdr), tcp_options, tcp_options_size);
 
-    if(flags & TCP_FIN)
-        tcp.fin = 1;
-    if(flags & TCP_SYN)
-        tcp.syn = 1;
-    if(flags & TCP_RST)
-        tcp.rst = 1;
-    if(flags & TCP_PUSH)
-        tcp.psh = 1;
-    if(flags & TCP_ACK)
-        tcp.ack = 1;
-    if(flags & TCP_URG)
-        tcp.urg = 1;
+    memcpy(packet_buff + sizeof(struct iphdr) + sizeof(struct tcphdr) + tcp_options_size, data, data_size);
 
     /* calculate tcp checksum */
-    struct {
-        uint32_t saddr, daddr;
-        uint8_t res;
-        uint8_t proto;
-        uint16_t len;
-    } pseudo;
+    pseudoh->saddr = src_addr;
+    pseudoh->daddr = dest_addr;
+    pseudoh->res = 0;
+    pseudoh->proto = IPPROTO_TCP;
+    pseudoh->len = htons(protocol_len);
+    tcph->check = leef_checksum((uint16_t *)pseudoh, sizeof(struct pseudo_header) + protocol_len);
 
-    pseudo.saddr = ip.saddr;
-    pseudo.daddr = ip.daddr;
-    pseudo.res = 0;
-    pseudo.proto = IPPROTO_TCP;
-    pseudo.len = htons(sizeof(struct tcphdr) + tcp_options_size + data_size);
+    /* build ip header */
+    iph->version = 4;
+    iph->ihl = 5;
+    iph->tot_len = htons(packet_size);
+    iph->id = htons(id);
+    iph->frag_off = frag_off;
+    iph->ttl = ttl;
+    iph->protocol = IPPROTO_TCP;
+    iph->saddr = src_addr;
+    iph->daddr = dest_addr;
+    iph->tos = 0;
+    iph->check = 0;
 
-    memcpy(buffer, &pseudo, sizeof(pseudo));
-    memcpy(buffer + sizeof(pseudo), (uint8_t *)&tcp, sizeof(struct tcphdr));
-    memcpy(buffer + sizeof(pseudo) + sizeof(struct tcphdr), tcp_options, tcp_options_size);
-    memcpy(buffer + sizeof(pseudo) + sizeof(struct tcphdr) + tcp_options_size, data, data_size);
-    tcp.check = leef_checksum((uint16_t *)buffer, sizeof(pseudo) + sizeof(struct tcphdr) + tcp_options_size + data_size);
-
-    /* build packet buffer and calculate ip checksum */
-    memcpy(buffer, &ip, sizeof(struct iphdr));
-    memcpy(buffer + sizeof(struct iphdr), &tcp, sizeof(struct tcphdr));
-    memcpy(buffer + sizeof(struct iphdr) + sizeof(struct tcphdr), tcp_options, tcp_options_size);
-    memcpy(buffer + sizeof(struct iphdr) + sizeof(struct tcphdr) + tcp_options_size, data, data_size);
-    ip.check = leef_checksum((uint16_t *)buffer, packet_size);
-    memcpy(buffer, &ip, sizeof(struct iphdr));
+    /* calculate ip checksum */
+    iph->check = leef_checksum((uint16_t *)iph, packet_size);
 
     /* send the packet */
-    struct sockaddr_in sktsin;
     sktsin.sin_addr.s_addr = dest_addr;
     sktsin.sin_family = AF_INET;
     sktsin.sin_port = 0;
     return sendto(handle->send_socket,
-                  buffer, packet_size,
+                  packet_buff, packet_size,
                   0,
                   (struct sockaddr *)&sktsin,
                   sizeof(struct sockaddr));
@@ -331,63 +325,52 @@ int leef_send_raw_udp(struct leef_handle *handle,
                       uint16_t frag_off, uint8_t ttl,
                       uint16_t data_size, uint8_t *data)
 {
-    uint8_t buffer[SEND_BUFFER_SIZE];
+    struct sockaddr_in sktsin;
+    struct pseudo_header *pseudoh = (struct pseudo_header *)(handle->send_buf + sizeof(struct iphdr) - sizeof(struct pseudo_header));
+    struct iphdr *iph = (struct iphdr *)handle->send_buf;
+    struct udphdr *udph = (struct udphdr *)(handle->send_buf + sizeof(struct iphdr));
+    uint8_t *packet_buff = handle->send_buf;
     uint16_t packet_size = sizeof(struct iphdr) + sizeof(struct udphdr) + data_size;
-    struct iphdr ip;
-    struct udphdr udp;
+    uint16_t protocol_len = sizeof(struct udphdr) + data_size;
 
-    bzero(&ip, sizeof(struct iphdr));
-    bzero(&udp, sizeof(struct udphdr));
+    /* build udp header */
+    udph->source = htons(src_port);
+    udph->dest = htons(dest_port);
+    udph->len = htons(protocol_len);
+    udph->check = 0;
 
-    /* setup ip header */
-    ip.version = 4;
-    ip.ihl = 5;
-    ip.tot_len = htons(packet_size);
-    ip.id = htons(id);
-    ip.frag_off = frag_off; /* don't fragment */
-    ip.ttl = ttl;
-    ip.protocol = IPPROTO_UDP;
-    ip.saddr = src_addr;
-    ip.daddr = dest_addr;
-
-    /* setup udp header */
-    udp.source = htons(src_port);
-    udp.dest = htons(dest_port);
-    udp.len = htons(sizeof(struct udphdr) + data_size);
+    memcpy(packet_buff + sizeof(struct iphdr) + sizeof(struct udphdr), data, data_size);
 
     /* calculate udp checksum */
-    struct {
-        uint32_t saddr, daddr;
-        uint8_t res;
-        uint8_t proto;
-        uint16_t len;
-    } pseudo;
+    pseudoh->saddr = src_addr;
+    pseudoh->daddr = dest_addr;
+    pseudoh->res = 0;
+    pseudoh->proto = IPPROTO_UDP;
+    pseudoh->len = htons(protocol_len);
+    udph->check = leef_checksum((uint16_t *)pseudoh, sizeof(struct pseudo_header) + protocol_len);
 
-    pseudo.saddr = ip.saddr;
-    pseudo.daddr = ip.daddr;
-    pseudo.res = 0;
-    pseudo.proto = IPPROTO_UDP;
-    pseudo.len = udp.len;
+    /* build ip header */
+    iph->version = 4;
+    iph->ihl = 5;
+    iph->tot_len = htons(packet_size);
+    iph->id = htons(id);
+    iph->frag_off = frag_off;
+    iph->ttl = ttl;
+    iph->protocol = IPPROTO_UDP;
+    iph->saddr = src_addr;
+    iph->daddr = dest_addr;
+    iph->tos = 0;
+    iph->check = 0;
 
-    memcpy(buffer, &pseudo, sizeof(pseudo));
-    memcpy(buffer + sizeof(pseudo), &udp, sizeof(struct udphdr));
-    memcpy(buffer + sizeof(pseudo) + sizeof(struct udphdr), data, data_size);
-    udp.check = leef_checksum((uint16_t *)buffer, sizeof(pseudo) + sizeof(struct udphdr) + data_size);
-
-    /* build packet buffer and calculate ip checksum */
-    memcpy(buffer, &ip, sizeof(struct iphdr));
-    memcpy(buffer + sizeof(struct iphdr), &udp, sizeof(struct udphdr));
-    memcpy(buffer + sizeof(struct iphdr) + sizeof(struct udphdr), data, data_size);
-    ip.check = leef_checksum((uint16_t *)buffer, packet_size);
-    memcpy(buffer, &ip, sizeof(struct iphdr));
+    /* calculate ip checksum */
+    iph->check = leef_checksum((uint16_t *)iph, packet_size);
 
     /* send the packet */
-    struct sockaddr_in sktsin;
     sktsin.sin_addr.s_addr = dest_addr;
     sktsin.sin_family = AF_INET;
     sktsin.sin_port = 0;
     return sendto(handle->send_socket,
-                  buffer, packet_size,
+                  packet_buff, packet_size,
                   0,
                   (struct sockaddr *)&sktsin,
                   sizeof(struct sockaddr));
@@ -561,7 +544,7 @@ int leef_random_range(int min, int max) {
 }
 
 uint8_t leef_random_byte() {
-    return (uint8_t)(rand() % 1 << 8);
+    return (uint8_t)(rand() % (1 << 8));
 }
 
 uint16_t leef_random_u16() {
@@ -570,6 +553,11 @@ uint16_t leef_random_u16() {
 
 uint32_t leef_random_u32() {
     return (uint32_t)(leef_random_u16() << 16 | leef_random_u16());
+}
+
+uint16_t leef_random_src_port()
+{
+    return 32769 + (rand() % 28232);
 }
 
 int64_t leef_proc_read_int64(const char *path)

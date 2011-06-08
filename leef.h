@@ -59,6 +59,7 @@ struct leef_handle
     int send_socket;
     int sniff_socket;
     int sniff_size;
+    uint8_t send_buf[SEND_BUFFER_SIZE];
 };
 
 enum e_leef_init_flags {
@@ -115,12 +116,12 @@ uint32_t leef_string_to_addr(const char *str);
 char *leef_addr_to_string(uint32_t addr);
 
 uint32_t leef_get_ticks();
-
 void leef_srand();
 int leef_random_range(int min, int max);
 uint8_t leef_random_byte();
 uint16_t leef_random_u16();
 uint32_t leef_random_u32();
+uint16_t leef_random_src_port();
 
 int64_t leef_proc_read_int(const char *path);
 int64_t leef_if_tx_packets(const char *devname);
