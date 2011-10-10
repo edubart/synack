@@ -830,7 +830,7 @@ int main(int argc, char **argv)
             if(!quiet) printf("CONNECTION FLOOD %s:%d\n", hostname, dest_port);
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, conn_flood_attack_thread, NULL);
-            interface_tx_thread();
+            conn_flood_sniff_thread();
             break;
         case SYN_FLOOD:
             if(!quiet) printf("SYN FLOOD %s:%d\n", hostname, dest_port);
