@@ -71,7 +71,7 @@ USAGE
       -u [interval]     - Sleep interval in microseconds (default: 10000)
       -b [bytes]        - Additional random bytes to send as data (default: 0)
       -m [threads]      - Number of send threads (default: 1)
-      -s [ip]           - Use a custom source address (default: interface ip)
+      -s [ip]           - Custom source ip, you may set to 'random' (default: interface ip)
       -d [binary file]  - Send binary file as data
       -f [text file]    - Read a list of IPs from a text file for spoofing
       -o                - Enable tcp options on SYN packets

