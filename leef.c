@@ -181,7 +181,7 @@ void leef_set_sniff_packet_size(struct leef_handle *handle, int size)
     handle->sniff_size = size;
 }
 
-int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *packet)
+int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *packet, int timeout)
 {
     socklen_t fromlen = sizeof(struct sockaddr_ll);
     struct sockaddr_ll fromaddr;
@@ -194,11 +194,11 @@ int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *pack
     FD_SET(handle->sniff_socket, &set);
 
     tv.tv_sec = 0;
-    tv.tv_usec = 50000;
+    tv.tv_usec = timeout * 1000;
 
-    do {
+    //do {
         ss = select(handle->sniff_socket + 1, &set, 0, 0, &tv);
-    } while ((ss < 0) && (errno == EINTR));
+    //} while ((ss < 0) && (errno == EINTR));
 
     if(FD_ISSET(handle->sniff_socket, &set)) {
         if(recvfrom(handle->sniff_socket, packet->buf, handle->sniff_size, 0, (struct sockaddr *)&fromaddr, &fromlen) == 0) {

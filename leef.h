@@ -72,7 +72,7 @@ int leef_init(struct leef_handle *handle, int init_flags);
 void leef_terminate(struct leef_handle *handle);
 
 void leef_set_sniff_packet_size(struct leef_handle *handle, int size);
-int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *packet);
+int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *packet, int timeout);
 
 int leef_send_raw_tcp(struct leef_handle *handle,
                       uint32_t src_addr, uint32_t dest_addr,
