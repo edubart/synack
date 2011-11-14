@@ -251,7 +251,7 @@ void conn_flood_sniff_thread()
                 } else if(packet.in_ip.tcp->ack == 1 && drop_connections) {
                     seq = packet.in_ip.tcp->ack_seq;
                     id = (((packet.in_ip.tcp->ack_seq - 2) & 0xffff00) >> 8) + 2;
-                    ack_seq = packet.in_ip.tcp->seq + 1;
+                    ack_seq = packet.in_ip.tcp->seq;
                     flags = TCP_ACK | TCP_RST;
                     leef_send_raw_tcp2(&leef,
                                        source_addr, dest_addr,
@@ -260,6 +260,11 @@ void conn_flood_sniff_thread()
                                        flags,
                                        0,
                                        NULL);
+                    tx_bytes += 54;
+                    if(conn_ports[src_port] == 1) {
+                        alive_connections--;
+                        conn_ports[src_port] = 0;
+                    }
                 }
             /* check if the packet is to the host */
             } else if(packet.ip->protocol == IPPROTO_TCP &&
@@ -267,9 +272,8 @@ void conn_flood_sniff_thread()
                       packet.ip->daddr == dest_addr &&
                       packet.in_ip.tcp->dest == dest_port &&
                       action_uuid == ((packet.in_ip.tcp->seq & 0xff000000) >> 24) &&
-                      (packet.in_ip.tcp->rst == 1 || (packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0))) {
-                if(packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0)
-                    syn_sent++;
+                      packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0) {
+                syn_sent++;
                 tx_bytes += 54;
                 if(conn_ports[packet.in_ip.tcp->source] == 1) {
                     conn_ports[packet.in_ip.tcp->source] = 0;
@@ -632,7 +636,7 @@ void print_help(char **argv)
     printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
     printf("  -o                - Enable tcp options on SYN packets\n");
     printf("  -q                - Quiet, don't print statistics output\n");
-    printf("  -x                - Drop connection after establishing it\n");
+    printf("  -x                - Drop connection when receive data after connected\n");
     printf("  --help            - Print this help\n");
 }
 
