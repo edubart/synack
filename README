@@ -76,4 +76,5 @@ USAGE
       -f [text file]    - Read a list of IPs from a text file for spoofing
       -o                - Enable tcp options on SYN packets
       -q                - Quiet, don't print statistics output
+      -x                - Drop connection after establishing it
       --help            - Print this help

