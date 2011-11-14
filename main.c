@@ -483,11 +483,11 @@ void *pa_flood_attack_thread(void *param)
 }
 
 /* TCP ping */
-void tcp_ping_thread()
+void *tcp_ping_thread(void *param)
 {
     struct leef_handle leef;
     if(!leef_init(&leef, SNIFFING_AND_INJECTING))
-        return;
+        return NULL;
     leef_set_sniff_packet_size(&leef, 128);
 
     leef_sniffed_packet packet;
@@ -577,6 +577,7 @@ void tcp_ping_thread()
     }
 
     leef_terminate(&leef);
+    return NULL;
 }
 
 void *run_timer_thread(void *param)
@@ -811,7 +812,7 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    pthread_t *threads = (pthread_t *)malloc((sizeof(pthread_t) * num_threads) + 1);
+    pthread_t *threads = (pthread_t *)malloc((sizeof(pthread_t) * (num_threads+1)));
     pthread_create(&threads[num_threads], NULL, run_timer_thread, NULL);
 
     /* force first tick */
@@ -826,8 +827,8 @@ int main(int argc, char **argv)
                 return -1;
             }
             if(!quiet) printf("TCP PING %s:%d\n", hostname, dest_port);
-            tcp_ping_thread();
-            num_threads = 0;
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, tcp_ping_thread, NULL);
             break;
         case CONN_FLOOD:
             if(dest_port == 0) {
