@@ -188,6 +188,7 @@ void conn_flood_sniff_thread()
                 src_port = packet.in_ip.tcp->dest;
                 /* SYN+ACK */
                 if(packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 1) {
+                    synack_received++;
                     id = (((packet.in_ip.tcp->ack_seq - 1) & 0xffff00) >> 8) + 1;
                     seq = packet.in_ip.tcp->ack_seq;
                     ack_seq = packet.in_ip.tcp->seq + 1;
@@ -210,11 +211,23 @@ void conn_flood_sniff_thread()
                         tx_bytes += 54;
                     }
 
-                    synack_received++;
-                    if(conn_ports[src_port] == 0) {
-                        conn_ports[src_port] = 1;
-                        alive_connections++;
-                        new_connections++;
+                    if(drop_connections && send_data_size == 0) {
+                        id++;
+                        flags = TCP_ACK | TCP_RST;
+                        leef_send_raw_tcp2(&leef,
+                                        source_addr, dest_addr,
+                                        src_port, dest_port,
+                                        id, seq, ack_seq,
+                                        flags,
+                                        0,
+                                        NULL);
+                        tx_bytes += 54;
+                    } else {
+                        if(conn_ports[src_port] == 0) {
+                            conn_ports[src_port] = 1;
+                            alive_connections++;
+                            new_connections++;
+                        }
                     }
                 /* RST */
                 } else if(packet.in_ip.tcp->rst == 1) {
@@ -636,7 +649,7 @@ void print_help(char **argv)
     printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
     printf("  -o                - Enable tcp options on SYN packets\n");
     printf("  -q                - Quiet, don't print statistics output\n");
-    printf("  -x                - Drop connection when receive data after connected\n");
+    printf("  -x                - Drop connection after established\n");
     printf("  --help            - Print this help\n");
 }
 
