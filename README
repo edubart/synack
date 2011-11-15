@@ -76,6 +76,6 @@ USAGE
       -f [text file]    - Read a list of IPs from a text file for spoofing
       -o                - Enable tcp options on SYN packets
       -q                - Quiet, don't print statistics output
-      -x                - Drop established when receive ACK packets
+      -x                - Drop established connections when receive ACK packets
       -y [delay]        - Drop established connections after delay
       --help            - Print this help

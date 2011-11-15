@@ -712,7 +712,7 @@ void print_help(char **argv)
     printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
     printf("  -o                - Enable tcp options on SYN packets\n");
     printf("  -q                - Quiet, don't print statistics output\n");
-    printf("  -x                - Drop established when receive ACK packets\n");
+    printf("  -x                - Drop established connections when receive ACK packets\n");
     printf("  -y [delay]        - Drop established connections after delay\n");
     printf("  --help            - Print this help\n");
 }
