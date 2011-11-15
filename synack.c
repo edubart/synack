@@ -157,6 +157,7 @@ void conn_flood_sniff_thread()
     int in_queue = 0;
     int conn_ports[65536];
     int i;
+    int sabot_warning = 0;
 
     memset(conn_ports, 0, sizeof(conn_ports));
     memset(packets_queue, 0xff, sizeof(tcp_queue_entry) * MAX_PACKETS_QUEUE);
@@ -344,14 +345,24 @@ void conn_flood_sniff_thread()
             } else if(packet.ip->protocol == IPPROTO_TCP &&
                       packet.ip->saddr == src_addr &&
                       packet.ip->daddr == dest_addr &&
-                      packet.in_ip.tcp->dest == dest_port &&
-                      action_uuid == ((packet.in_ip.tcp->seq & 0xff000000) >> 24) &&
-                      packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0) {
-                syn_sent++;
-                tx_bytes += 54;
-                if(conn_ports[packet.in_ip.tcp->source] == 1) {
-                    conn_ports[packet.in_ip.tcp->source] = 0;
-                    alive_connections--;
+                      packet.in_ip.tcp->dest == dest_port) {
+                /* SYN sent from us */
+                if(packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0 &&
+                   action_uuid == ((packet.in_ip.tcp->seq & 0xff000000) >> 24)) {
+                    syn_sent++;
+                    tx_bytes += 54;
+                    if(conn_ports[packet.in_ip.tcp->source] == 1) {
+                        conn_ports[packet.in_ip.tcp->source] = 0;
+                        alive_connections--;
+                    }
+                /* RST sent by the kernel that sabots the attack*/
+                } else if(packet.in_ip.tcp->rst == 1 && packet.in_ip.tcp->ack == 0) {
+                    if(!sabot_warning) {
+                        printf("WARNING: cought RST sent by kernel, this means that the kernel is saboting your attacks,\n"
+                               "         please make sure that you have the following rule in your iptables firewall:\n"
+                               "             iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP\n");
+                        sabot_warning = 1;
+                    }
                 }
             }
         }
