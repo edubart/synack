@@ -1,5 +1,5 @@
 TARGET=synack
-SRCS=leef.c main.c
+SRCS=leef.c synack.c
 OBJS=${SRCS:.c=.o}
 CC=gcc
 CFLAGS=-Wall -O2 -D_REENTRANT
