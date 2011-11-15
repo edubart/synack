@@ -103,7 +103,6 @@ void *conn_flood_attack_thread(void *param)
     }
 
     leef_terminate(&leef);
-    running = 0;
     return NULL;
 }
 
@@ -401,7 +400,7 @@ void interface_tx_thread()
             lastTxPackets = txPackets;
             lastTxBytes = txBytes;
         }
-        usleep(100 * 1000);
+        usleep(50 * 1000);
     }
 
     /* print stastistics */

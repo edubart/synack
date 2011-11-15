@@ -196,11 +196,15 @@ int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *pack
     tv.tv_sec = 0;
     tv.tv_usec = timeout * 1000;
 
-    //do {
+    /*
+    do {
         ss = select(handle->sniff_socket + 1, &set, 0, 0, &tv);
-    //} while ((ss < 0) && (errno == EINTR));
+    } while ((ss < 0) && (errno == EINTR));
+    */
 
-    if(FD_ISSET(handle->sniff_socket, &set)) {
+    ss = select(handle->sniff_socket + 1, &set, 0, 0, &tv);
+
+    if(ss != -1 && FD_ISSET(handle->sniff_socket, &set)) {
         if(recvfrom(handle->sniff_socket, packet->buf, handle->sniff_size, 0, (struct sockaddr *)&fromaddr, &fromlen) == 0) {
             return 0;
         }
