@@ -572,6 +572,8 @@ void *pa_flood_attack_thread(void *param)
                         leef_random_u16(), leef_random_u32(), leef_random_u32(),
                         TCP_PUSH | TCP_ACK,
                         send_data_size, get_send_data());
+        if(sleep_interval)
+            usleep(sleep_interval);
     }
 
     leef_terminate(&leef);
