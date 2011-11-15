@@ -23,7 +23,7 @@ FLOODS DESCRIPTION
     and then preventing new connections.
 
     NOTE: If you use this attack, you MUST add the following iptables
-    rule to prevent your kernel saboting the attack, otherwise your
+    rule to prevent your kernel aborting the attack, otherwise your
     kernel will reject all established connections on the target:
       iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP
 

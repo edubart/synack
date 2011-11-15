@@ -157,7 +157,7 @@ void conn_flood_sniff_thread()
     int in_queue = 0;
     int conn_ports[65536];
     int i;
-    int sabot_warning = 0;
+    int abort_warning = 0;
 
     memset(conn_ports, 0, sizeof(conn_ports));
     memset(packets_queue, 0xff, sizeof(tcp_queue_entry) * MAX_PACKETS_QUEUE);
@@ -355,13 +355,13 @@ void conn_flood_sniff_thread()
                         conn_ports[packet.in_ip.tcp->source] = 0;
                         alive_connections--;
                     }
-                /* RST sent by the kernel that sabots the attack*/
+                /* RST sent by the kernel that aborts the attack*/
                 } else if(packet.in_ip.tcp->rst == 1 && packet.in_ip.tcp->ack == 0) {
-                    if(!sabot_warning) {
-                        printf("WARNING: cought RST sent by kernel, this means that the kernel is saboting your attacks,\n"
+                    if(!abort_warning) {
+                        printf("WARNING: cough RST sent by kernel, this means that the kernel is aborting your attacks,\n"
                                "         please make sure that you have the following rule in your iptables firewall:\n"
                                "             iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP\n");
-                        sabot_warning = 1;
+                        abort_warning = 1;
                     }
                 }
             }
