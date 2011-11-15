@@ -680,7 +680,7 @@ void *run_timer_thread(void *param)
 {
     int i=0;
     if(run_time > 0) {
-        for(i=0;i<run_time;++i)
+        for(i=0;i<run_time && running;++i)
             usleep(1000*1000);
         running = 0;
     }
