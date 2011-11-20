@@ -118,6 +118,8 @@ uint32_t leef_get_ticks();
 int64_t leef_proc_read_int(const char *path);
 int64_t leef_if_tx_packets(const char *devname);
 int64_t leef_if_tx_bytes(const char *devname);
+int64_t leef_if_rx_packets(const char *devname);
+int64_t leef_if_rx_bytes(const char *devname);
 uint32_t leef_if_ipv4(const char *devname);
 
 /* fast random implementation */

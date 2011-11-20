@@ -24,7 +24,8 @@ enum e_action {
     UDP_FLOOD,
     MIX_FLOOD,
     MIX2_FLOOD,
-    PA_FLOOD
+    PA_FLOOD,
+    MONITOR,
 };
 
 /* global variables */
@@ -402,16 +403,20 @@ void interface_tx_thread()
         if(ticks_now - last_ticks >= 1000) {
             txPackets = leef_if_tx_packets(interface);
             txBytes = leef_if_tx_bytes(interface);
-            if(!quiet) printf("%s TX: %d pkt/s, %.02f Mbps\n",
+            if(!quiet) {
+                if(run_time > 0)
+                    printf("%.1f%%, ", (ticks_now/10)/(float)run_time);
+                printf("%s TX: %d pps, %.02f mbps\n",
                    interface,
                    (int)(txPackets - lastTxPackets),
                    ((txBytes - lastTxBytes)*8)/1000000.0);
+            }
             fflush(stdout);
             last_ticks = ticks_now;
             lastTxPackets = txPackets;
             lastTxBytes = txBytes;
         }
-        usleep(50 * 1000);
+        usleep(10 * 1000);
     }
 
     /* print stastistics */
@@ -419,6 +424,58 @@ void interface_tx_thread()
     if(!quiet) printf("%lld packets sent, %.02f MB sent\n",
            (long long)(leef_if_tx_packets(interface) - initialTxPackets),
            (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
+}
+
+void interface_traffic_thread()
+{
+    uint32_t last_ticks = leef_get_ticks();
+    uint32_t ticks_now;
+    int64_t lastRxPackets = leef_if_rx_packets(interface);
+    int64_t rxPackets;
+    int64_t lastRxBytes = leef_if_rx_bytes(interface);
+    int64_t rxBytes;
+    int64_t initialRxPackets = lastRxPackets;
+    int64_t initialRxBytes = lastRxBytes;
+    int64_t lastTxPackets = leef_if_tx_packets(interface);
+    int64_t txPackets;
+    int64_t lastTxBytes = leef_if_tx_bytes(interface);
+    int64_t txBytes;
+    int64_t initialTxPackets = lastTxPackets;
+    int64_t initialTxBytes = lastTxBytes;
+
+    while(running) {
+        ticks_now = leef_get_ticks();
+        if(ticks_now - last_ticks >= 1000) {
+            rxPackets = leef_if_rx_packets(interface);
+            rxBytes = leef_if_rx_bytes(interface);
+            txPackets = leef_if_tx_packets(interface);
+            txBytes = leef_if_tx_bytes(interface);
+            if(!quiet) printf("%s =>  RX: %1d pps, %.02f mbps    TX: %d pps, %.02f mbps\n",
+                   interface,
+                   (int)(rxPackets - lastRxPackets),
+                   ((rxBytes - lastRxBytes)*8)/1000000.0,
+                   (int)(txPackets - lastTxPackets),
+                   ((txBytes - lastTxBytes)*8)/1000000.0);
+            fflush(stdout);
+            last_ticks = ticks_now;
+            lastRxPackets = rxPackets;
+            lastRxBytes = rxBytes;
+            lastTxPackets = txPackets;
+            lastTxBytes = txBytes;
+        }
+        usleep(10 * 1000);
+    }
+
+    /* print stastistics */
+    if(!quiet) {
+        printf("\n--- %s RX/TX statistics ---\n", interface);
+        printf("%lld packets received, %.02f MB received\n",
+           (long long)(leef_if_rx_packets(interface) - initialRxPackets),
+           (double)(leef_if_rx_bytes(interface) - initialRxBytes)/1000000.0);
+        printf("%lld packets sent, %.02f MB sent\n",
+           (long long)(leef_if_tx_packets(interface) - initialTxPackets),
+           (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
+    }
 }
 
 /* SYN flood */
@@ -690,10 +747,12 @@ void *tcp_ping_thread(void *param)
 
 void *run_timer_thread(void *param)
 {
-    int i=0;
+    int i, j;
     if(run_time > 0) {
-        for(i=0;i<run_time && running;++i)
-            usleep(1000*1000);
+        for(i=0;i<run_time && running;++i) {
+            for(j=0;j<10 && running;++j)
+                usleep(100*1000);
+        }
         running = 0;
     }
     return NULL;
@@ -711,6 +770,7 @@ void print_help(char **argv)
     printf("  -M                - Mixed S/A/PA/FA flood\n");
     printf("  -N                - Mixed A/PA/FA flood\n");
     printf("  -U                - UDP flood\n");
+    printf("  -O                - Monitor interface traffic\n");
     printf("General options:\n");
     printf("  -i [interface]    - Which interface to do the action (required)\n");
     printf("  -h [host]         - Target host (required)\n");
@@ -779,6 +839,9 @@ int main(int argc, char **argv)
                     break;
                 case 'D':
                     action = PA_FLOOD;
+                    break;
+                case 'O':
+                    action = MONITOR;
                     break;
                 case 'i':
                     interface = argv[++arg];
@@ -918,7 +981,7 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    if(dest_addr == 0) {
+    if(dest_addr == 0 && action != MONITOR) {
         fprintf(stderr, "please specify a target host, see --help\n");
         return -1;
     }
@@ -929,6 +992,7 @@ int main(int argc, char **argv)
     }
 
     pthread_t *threads = (pthread_t *)malloc((sizeof(pthread_t) * (num_threads+1)));
+    memset(threads, 0, sizeof(pthread_t) * (num_threads+1));
     pthread_create(&threads[num_threads], NULL, run_timer_thread, NULL);
 
     /* force first tick */
@@ -992,11 +1056,17 @@ int main(int argc, char **argv)
                 pthread_create(&threads[i], NULL, pa_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
+        case MONITOR:
+            if(!quiet) printf("Monitoring traffic on interface %s\n", interface);
+            interface_traffic_thread();
+            break;
     }
 
     /* wait threads */
-    for(i=0;i<=num_threads;++i)
-        pthread_join(threads[i], NULL);
+    for(i=0;i<=num_threads;++i) {
+        if(threads[i])
+            pthread_join(threads[i], NULL);
+    }
 
     /* cleanup */
     free(threads);

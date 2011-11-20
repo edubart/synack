@@ -63,6 +63,7 @@ USAGE
       -M                - Mixed S/A/PA/FA flood
       -N                - Mixed A/PA/FA flood
       -U                - UDP flood
+      -O                - Monitor interface traffic
   General options:
       -i [interface]    - Which interface to do the action (required)
       -h [host]         - Target host (required)

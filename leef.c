@@ -562,6 +562,20 @@ int64_t leef_if_tx_bytes(const char *devname)
     return leef_proc_read_int64(path);
 }
 
+int64_t leef_if_rx_packets(const char *devname)
+{
+    char path[128];
+    sprintf(path, "/sys/class/net/%s/statistics/rx_packets", devname);
+    return leef_proc_read_int64(path);
+}
+
+int64_t leef_if_rx_bytes(const char *devname)
+{
+    char path[128];
+    sprintf(path, "/sys/class/net/%s/statistics/rx_bytes", devname);
+    return leef_proc_read_int64(path);
+}
+
 uint32_t leef_if_ipv4(const char *devname)
 {
     int fd;
