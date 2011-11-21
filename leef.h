@@ -30,6 +30,7 @@
 
 #define SNIFF_BUFFER_SIZE 2048
 #define SEND_BUFFER_SIZE 2048
+#define BYTEPSEC_TO_MBITPSEC (8.0/1000000.0)
 
 enum e_tcp_flags {
     TCP_FIN     = 0x01,
@@ -117,8 +118,10 @@ char *leef_addr_to_string(uint32_t addr);
 uint32_t leef_get_ticks();
 int64_t leef_proc_read_int(const char *path);
 int64_t leef_if_tx_packets(const char *devname);
+int64_t leef_if_tx_dropped(const char *devname);
 int64_t leef_if_tx_bytes(const char *devname);
 int64_t leef_if_rx_packets(const char *devname);
+int64_t leef_if_rx_dropped(const char *devname);
 int64_t leef_if_rx_bytes(const char *devname);
 uint32_t leef_if_ipv4(const char *devname);
 

@@ -392,38 +392,45 @@ void interface_tx_thread()
     uint32_t last_ticks = leef_get_ticks();
     uint32_t ticks_now;
     int64_t lastTxPackets = leef_if_tx_packets(interface);
-    int64_t txPackets;
+    int64_t lastTxDropped = leef_if_tx_dropped(interface);
     int64_t lastTxBytes = leef_if_tx_bytes(interface);
-    int64_t txBytes;
     int64_t initialTxPackets = lastTxPackets;
+    int64_t initialTxDropped = lastTxDropped;
     int64_t initialTxBytes = lastTxBytes;
+    int64_t txPackets;
+    int64_t txDropped;
+    int64_t txBytes;
 
     while(running) {
         ticks_now = leef_get_ticks();
         if(ticks_now - last_ticks >= 1000) {
             txPackets = leef_if_tx_packets(interface);
+            txDropped = leef_if_tx_dropped(interface);
             txBytes = leef_if_tx_bytes(interface);
             if(!quiet) {
                 if(run_time > 0)
                     printf("%.1f%%, ", (ticks_now/10)/(float)run_time);
-                printf("%s TX: %d pps, %.02f mbps\n",
-                   interface,
-                   (int)(txPackets - lastTxPackets),
-                   ((txBytes - lastTxBytes)*8)/1000000.0);
+                printf("%s =>  tx_packets: %d pps (%.02f mbps)    tx_dropped: %d pps\n",
+                       interface,
+                       (int)(txPackets - lastTxPackets),
+                       (txBytes - lastTxBytes) * BYTEPSEC_TO_MBITPSEC,
+                       (int)(txDropped - lastTxDropped));
             }
             fflush(stdout);
             last_ticks = ticks_now;
             lastTxPackets = txPackets;
+            lastTxDropped = txDropped;
             lastTxBytes = txBytes;
         }
         usleep(10 * 1000);
     }
 
     /* print stastistics */
-    if(!quiet) printf("\n--- %s TX statistics ---\n", interface);
-    if(!quiet) printf("%lld packets sent, %.02f MB sent\n",
-           (long long)(leef_if_tx_packets(interface) - initialTxPackets),
-           (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
+    if(!quiet) printf("\n--- %s tx statistics ---\n", interface);
+    if(!quiet) printf("%lld packets sent, %lld packets dropped, %.02f MB sent\n",
+                      (long long)(leef_if_tx_packets(interface) - initialTxPackets),
+                      (long long)(leef_if_tx_dropped(interface) - initialTxDropped),
+                      (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
 }
 
 void interface_traffic_thread()
@@ -431,51 +438,62 @@ void interface_traffic_thread()
     uint32_t last_ticks = leef_get_ticks();
     uint32_t ticks_now;
     int64_t lastRxPackets = leef_if_rx_packets(interface);
-    int64_t rxPackets;
+    int64_t lastRxDropped = leef_if_rx_dropped(interface);
     int64_t lastRxBytes = leef_if_rx_bytes(interface);
-    int64_t rxBytes;
     int64_t initialRxPackets = lastRxPackets;
+    int64_t initialRxDropped = lastRxDropped;
     int64_t initialRxBytes = lastRxBytes;
+    int64_t rxPackets;
+    int64_t rxDropped;
+    int64_t rxBytes;
     int64_t lastTxPackets = leef_if_tx_packets(interface);
-    int64_t txPackets;
+    int64_t lastTxDropped = leef_if_tx_dropped(interface);
     int64_t lastTxBytes = leef_if_tx_bytes(interface);
-    int64_t txBytes;
     int64_t initialTxPackets = lastTxPackets;
+    int64_t initialTxDropped = lastTxDropped;
     int64_t initialTxBytes = lastTxBytes;
+    int64_t txPackets;
+    int64_t txDropped;
+    int64_t txBytes;
 
     while(running) {
         ticks_now = leef_get_ticks();
         if(ticks_now - last_ticks >= 1000) {
             rxPackets = leef_if_rx_packets(interface);
+            rxDropped = leef_if_rx_dropped(interface);
             rxBytes = leef_if_rx_bytes(interface);
             txPackets = leef_if_tx_packets(interface);
+            txDropped = leef_if_tx_dropped(interface);
             txBytes = leef_if_tx_bytes(interface);
-            if(!quiet) printf("%s =>  RX: %1d pps, %.02f mbps    TX: %d pps, %.02f mbps\n",
+            printf("%s =>  rx_packets: %d pps (%.02f mbps)    rx_dropped: %d pps    tx_packets: %d pps (%.02f mbps)    tx_dropped: %d pps\n",
                    interface,
                    (int)(rxPackets - lastRxPackets),
-                   ((rxBytes - lastRxBytes)*8)/1000000.0,
+                   (rxBytes - lastRxBytes) * BYTEPSEC_TO_MBITPSEC,
+                   (int)(rxDropped - lastRxDropped),
                    (int)(txPackets - lastTxPackets),
-                   ((txBytes - lastTxBytes)*8)/1000000.0);
+                   (txBytes - lastTxBytes) * BYTEPSEC_TO_MBITPSEC,
+                   (int)(txDropped - lastTxDropped));
             fflush(stdout);
             last_ticks = ticks_now;
             lastRxPackets = rxPackets;
+            lastRxDropped = rxDropped;
             lastRxBytes = rxBytes;
             lastTxPackets = txPackets;
+            lastTxDropped = txDropped;
             lastTxBytes = txBytes;
         }
         usleep(10 * 1000);
     }
 
-    /* print stastistics */
-    if(!quiet) {
-        printf("\n--- %s RX/TX statistics ---\n", interface);
-        printf("%lld packets received, %.02f MB received\n",
-           (long long)(leef_if_rx_packets(interface) - initialRxPackets),
-           (double)(leef_if_rx_bytes(interface) - initialRxBytes)/1000000.0);
-        printf("%lld packets sent, %.02f MB sent\n",
-           (long long)(leef_if_tx_packets(interface) - initialTxPackets),
-           (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
-    }
+    printf("\n--- %s rx/tx statistics ---\n", interface);
+    printf("%lld packets received, %lld packets dropped, %.02f MB received\n",
+        (long long)(leef_if_rx_packets(interface) - initialRxPackets),
+        (long long)(leef_if_rx_dropped(interface) - initialRxDropped),
+        (double)(leef_if_rx_bytes(interface) - initialRxBytes)/1000000.0);
+    printf("%lld packets sent, %lld packets dropped, %.02f MB sent\n",
+        (long long)(leef_if_tx_packets(interface) - initialTxPackets),
+        (long long)(leef_if_tx_dropped(interface) - initialTxDropped),
+        (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
 }
 
 /* SYN flood */
