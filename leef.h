@@ -125,6 +125,11 @@ int64_t leef_if_rx_dropped(const char *devname);
 int64_t leef_if_rx_bytes(const char *devname);
 uint32_t leef_if_ipv4(const char *devname);
 
+extern volatile unsigned long leef_txpackets;
+extern volatile unsigned long leef_txbytes;
+static inline unsigned long leef_get_txpackets() { return leef_txpackets; }
+static inline unsigned long leef_get_txbytes() { return leef_txpackets; }
+
 /* fast random implementation */
 #define LEEF_MAX_RAND 65536
 
@@ -135,8 +140,12 @@ static inline void leef_srand(unsigned long next_rand_seed) {
 }
 
 static inline int leef_rand() {
-    leef_next_rand_seed = leef_next_rand_seed * 1103515245 + 12345;
-    return ((unsigned)(leef_next_rand_seed/65536) % LEEF_MAX_RAND);
+    unsigned long current_seed, next_seed;
+    do {
+        current_seed = leef_next_rand_seed;
+        next_seed = current_seed * 1103515245 + 12345;
+    } while(!__sync_bool_compare_and_swap(&leef_next_rand_seed, current_seed, next_seed));
+    return ((unsigned)(next_seed/65536) % LEEF_MAX_RAND);
 }
 
 static inline int leef_random_range(int min, int max) {

@@ -391,35 +391,29 @@ void interface_tx_thread()
 {
     uint32_t last_ticks = leef_get_ticks();
     uint32_t ticks_now;
-    int64_t lastTxPackets = leef_if_tx_packets(interface);
-    int64_t lastTxDropped = leef_if_tx_dropped(interface);
-    int64_t lastTxBytes = leef_if_tx_bytes(interface);
+    int64_t lastTxPackets = leef_get_txpackets();
+    int64_t lastTxBytes = leef_get_txbytes();
     int64_t initialTxPackets = lastTxPackets;
-    int64_t initialTxDropped = lastTxDropped;
     int64_t initialTxBytes = lastTxBytes;
     int64_t txPackets;
-    int64_t txDropped;
     int64_t txBytes;
 
     while(running) {
         ticks_now = leef_get_ticks();
         if(ticks_now - last_ticks >= 1000) {
-            txPackets = leef_if_tx_packets(interface);
-            txDropped = leef_if_tx_dropped(interface);
-            txBytes = leef_if_tx_bytes(interface);
+            txPackets = leef_get_txpackets();
+            txBytes = leef_get_txbytes();
             if(!quiet) {
                 if(run_time > 0)
                     printf("%.1f%%, ", (ticks_now/10)/(float)run_time);
-                printf("%s =>  tx_packets: %d pps (%.02f mbps)    tx_dropped: %d pps\n",
+                printf("%s =>  tx_packets: %d pps (%.02f mbps)\n",
                        interface,
                        (int)(txPackets - lastTxPackets),
-                       (txBytes - lastTxBytes) * BYTEPSEC_TO_MBITPSEC,
-                       (int)(txDropped - lastTxDropped));
+                       (txBytes - lastTxBytes) * BYTEPSEC_TO_MBITPSEC);
             }
             fflush(stdout);
             last_ticks = ticks_now;
             lastTxPackets = txPackets;
-            lastTxDropped = txDropped;
             lastTxBytes = txBytes;
         }
         usleep(10 * 1000);
@@ -427,10 +421,9 @@ void interface_tx_thread()
 
     /* print stastistics */
     if(!quiet) printf("\n--- %s tx statistics ---\n", interface);
-    if(!quiet) printf("%lld packets sent, %lld packets dropped, %.02f MB sent\n",
-                      (long long)(leef_if_tx_packets(interface) - initialTxPackets),
-                      (long long)(leef_if_tx_dropped(interface) - initialTxDropped),
-                      (double)(leef_if_tx_bytes(interface) - initialTxBytes)/1000000.0);
+    if(!quiet) printf("%lld packets sent, %.02f MB sent\n",
+                      (long long)(leef_get_txpackets()- initialTxPackets),
+                      (double)(leef_get_txbytes() - initialTxBytes)/1000000.0);
 }
 
 void interface_traffic_thread()

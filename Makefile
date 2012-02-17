@@ -22,4 +22,5 @@ clean:
 distclean: clean
 
 install:
-	install -m 4755 ${TARGET} $(prefix)/bin
+	mkdir -p $(prefix)/bin
+	install -m 4755 ${TARGET} $(prefix)/bin/

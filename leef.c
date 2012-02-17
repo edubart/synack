@@ -30,6 +30,8 @@ struct pseudo_header {
 };
 
 volatile unsigned long leef_next_rand_seed = 1;
+volatile unsigned long leef_txpackets = 0;
+volatile unsigned long leef_txbytes = 0;
 
 int leef_adjust_sniffed_packet_buffer(leef_sniffed_packet *packet)
 {
@@ -320,6 +322,8 @@ int leef_send_raw_tcp(struct leef_handle *handle,
     sktsin.sin_addr.s_addr = dest_addr;
     sktsin.sin_family = AF_INET;
     sktsin.sin_port = 0;
+    __sync_fetch_and_add(&leef_txpackets, 1);
+    __sync_fetch_and_add(&leef_txbytes, packet_size + ETH_HLEN);
     return sendto(handle->send_socket,
                   packet_buff, packet_size,
                   0,
@@ -379,6 +383,8 @@ int leef_send_raw_udp(struct leef_handle *handle,
     sktsin.sin_addr.s_addr = dest_addr;
     sktsin.sin_family = AF_INET;
     sktsin.sin_port = 0;
+    __sync_fetch_and_add(&leef_txpackets, 1);
+    __sync_fetch_and_add(&leef_txbytes, packet_size + ETH_HLEN);
     return sendto(handle->send_socket,
                   packet_buff, packet_size,
                   0,
