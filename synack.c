@@ -351,7 +351,7 @@ void conn_flood_sniff_thread()
                 if(packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 0 &&
                    action_uuid == ((packet.in_ip.tcp->seq & 0xff000000) >> 24)) {
                     syn_sent++;
-                    tx_bytes += 54;
+                    tx_bytes += packet.len;
                     if(conn_ports[packet.in_ip.tcp->source] == 1) {
                         conn_ports[packet.in_ip.tcp->source] = 0;
                         alive_connections--;
