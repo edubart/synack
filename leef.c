@@ -21,6 +21,7 @@
 #include <linux/if_packet.h>
 #include <linux/if_ether.h>
 #include <linux/if_fddi.h>
+#include <pthread.h>
 
 struct pseudo_header {
     uint32_t saddr, daddr;
@@ -29,7 +30,7 @@ struct pseudo_header {
     uint16_t len;
 };
 
-volatile unsigned long leef_next_rand_seed = 1;
+__thread unsigned long leef_next_rand_seed;
 volatile unsigned long leef_txpackets = 0;
 volatile unsigned long leef_txbytes = 0;
 
@@ -138,7 +139,7 @@ int leef_init(struct leef_handle *handle, int flags)
     /* seed random */
     struct timeval tv;
     gettimeofday(&tv, 0);
-    leef_srand((tv.tv_sec * 1000) + (tv.tv_usec / 1000));
+    leef_srand(tv.tv_usec * (unsigned long)pthread_self());
 
     handle->send_socket = -1;
     handle->sniff_socket = -1;

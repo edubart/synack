@@ -133,19 +133,15 @@ static inline unsigned long leef_get_txbytes() { return leef_txpackets; }
 /* fast random implementation */
 #define LEEF_MAX_RAND 65536
 
-extern volatile unsigned long leef_next_rand_seed;
+extern __thread unsigned long leef_next_rand_seed;
 
 static inline void leef_srand(unsigned long next_rand_seed) {
     leef_next_rand_seed = next_rand_seed;
 }
 
 static inline int leef_rand() {
-    unsigned long current_seed, next_seed;
-    do {
-        current_seed = leef_next_rand_seed;
-        next_seed = current_seed * 1103515245 + 12345;
-    } while(!__sync_bool_compare_and_swap(&leef_next_rand_seed, current_seed, next_seed));
-    return ((unsigned)(next_seed/65536) % LEEF_MAX_RAND);
+    leef_next_rand_seed = leef_next_rand_seed * 1103515245 + 12345;
+    return ((unsigned)(leef_next_rand_seed/65536) % LEEF_MAX_RAND);
 }
 
 static inline int leef_random_range(int min, int max) {

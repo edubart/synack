@@ -3,15 +3,14 @@ SRCS=leef.c synack.c
 OBJS=${SRCS:.c=.o}
 CC=gcc
 CFLAGS=-Wall -O2 -D_REENTRANT
-LDFLAGS=-s -lm
-LIBS=-lpthread
+LDFLAGS=-s -pthread -lm
 prefix=/usr/local
 
 .PHONY: all clean distclean install
 all: ${TARGET}
 
 ${TARGET}: ${OBJS}
-	${CC} ${LDFLAGS} -o $@ $^ ${LIBS}
+	${CC} ${LDFLAGS} -o $@ $^
 
 ${OBJS}: %.o: %.c
 	${CC} ${CFLAGS} -o $@ -c $<
