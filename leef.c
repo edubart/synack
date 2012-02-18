@@ -329,13 +329,16 @@ int leef_send_raw_tcp(struct leef_handle *handle,
     sktsin.sin_addr.s_addr = dest_addr;
     sktsin.sin_family = AF_INET;
     sktsin.sin_port = 0;
-    __sync_fetch_and_add(&leef_txpackets, 1);
-    __sync_fetch_and_add(&leef_txbytes, packet_size + ETH_HLEN);
-    return sendto(handle->send_socket,
-                  packet_buff, packet_size,
-                  0,
-                  (struct sockaddr *)&sktsin,
-                  sizeof(struct sockaddr));
+    int sent = sendto(handle->send_socket,
+                      packet_buff, packet_size,
+                      0,
+                      (struct sockaddr *)&sktsin,
+                      sizeof(struct sockaddr));
+    if(sent > 0) {
+      __sync_fetch_and_add(&leef_txpackets, 1);
+      __sync_fetch_and_add(&leef_txbytes, packet_size + ETH_HLEN);
+    }
+    return sent;
 }
 
 int leef_send_raw_udp(struct leef_handle *handle,
@@ -390,13 +393,16 @@ int leef_send_raw_udp(struct leef_handle *handle,
     sktsin.sin_addr.s_addr = dest_addr;
     sktsin.sin_family = AF_INET;
     sktsin.sin_port = 0;
-    __sync_fetch_and_add(&leef_txpackets, 1);
-    __sync_fetch_and_add(&leef_txbytes, packet_size + ETH_HLEN);
-    return sendto(handle->send_socket,
-                  packet_buff, packet_size,
-                  0,
-                  (struct sockaddr *)&sktsin,
-                  sizeof(struct sockaddr));
+    int sent = sendto(handle->send_socket,
+                      packet_buff, packet_size,
+                      0,
+                      (struct sockaddr *)&sktsin,
+                      sizeof(struct sockaddr));
+    if(sent > 0) {
+      __sync_fetch_and_add(&leef_txpackets, 1);
+      __sync_fetch_and_add(&leef_txbytes, packet_size + ETH_HLEN);
+    }
+    return sent;
 }
 
 int leef_send_udp_data(struct leef_handle *handle,
