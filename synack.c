@@ -417,7 +417,7 @@ void interface_tx_thread()
             if(!quiet) {
                 if(run_time > 0)
                     printf("%.1f%%, ", (ticks_now/10)/(float)run_time);
-                printf("%s =>  tx_packets: %d pps (%.02f mbps)\n",
+                printf("%s =>  tx_packets: %d pps (%.02f Mbps)\n",
                     interface,
                     pps,
                     (txBytes - lastTxBytes) * BYTEPSEC_TO_MBITPSEC);
@@ -484,7 +484,7 @@ void interface_traffic_thread()
             txPackets = leef_if_tx_packets(interface);
             txDropped = leef_if_tx_dropped(interface);
             txBytes = leef_if_tx_bytes(interface);
-            printf("%s =>  rx_packets: %d pps (%.02f mbps)    rx_dropped: %d pps    tx_packets: %d pps (%.02f mbps)    tx_dropped: %d pps\n",
+            printf("%s =>  rx_packets: %d pps (%.02f Mbps)    rx_dropped: %d pps    tx_packets: %d pps (%.02f Mbps)    tx_dropped: %d pps\n",
                 interface,
                 (int)(rxPackets - lastRxPackets),
                 (rxBytes - lastRxBytes) * BYTEPSEC_TO_MBITPSEC,

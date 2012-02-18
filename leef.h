@@ -128,7 +128,7 @@ uint32_t leef_if_ipv4(const char *devname);
 extern volatile unsigned long leef_txpackets;
 extern volatile unsigned long leef_txbytes;
 static inline unsigned long leef_get_txpackets() { return leef_txpackets; }
-static inline unsigned long leef_get_txbytes() { return leef_txpackets; }
+static inline unsigned long leef_get_txbytes() { return leef_txbytes; }
 
 /* fast random implementation */
 #define LEEF_MAX_RAND 65536
