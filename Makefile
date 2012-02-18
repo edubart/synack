@@ -2,7 +2,7 @@ TARGET=synack
 SRCS=leef.c synack.c
 OBJS=${SRCS:.c=.o}
 CC=gcc
-CFLAGS=-Wall -O2 -D_REENTRANT
+CFLAGS=-Wall -O2
 LDFLAGS=-s -pthread -lm
 prefix=/usr/local
 
@@ -12,7 +12,7 @@ all: ${TARGET}
 ${TARGET}: ${OBJS}
 	${CC} ${LDFLAGS} -o $@ $^
 
-${OBJS}: %.o: %.c
+${OBJS}: %.o: %.c *.h
 	${CC} ${CFLAGS} -o $@ -c $<
 
 clean:
