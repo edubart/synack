@@ -116,7 +116,7 @@ uint32_t leef_resolve_hostname(const char *hostname);
 uint32_t leef_string_to_addr(const char *str);
 char *leef_addr_to_string(uint32_t addr);
 uint32_t leef_get_ticks();
-int64_t leef_proc_read_int(const char *path);
+int64_t leef_proc_read_int64(const char *path);
 int64_t leef_if_tx_packets(const char *devname);
 int64_t leef_if_tx_dropped(const char *devname);
 int64_t leef_if_tx_bytes(const char *devname);
@@ -159,5 +159,7 @@ static inline uint8_t leef_random_byte() { return (uint8_t)(leef_rand() % 256); 
 static inline uint16_t leef_random_u16() { return (uint16_t)leef_rand(); }
 static inline uint32_t leef_random_u32() { return (uint32_t)(leef_random_u16() << 16 | leef_random_u16()); }
 static inline uint16_t leef_random_src_port() { return 32769 + (leef_rand() % 28232); }
+static inline uint16_t leef_random_dst_port() { return 1 + (leef_rand() % 65535); }
+uint16_t leef_random_dst_syn_port();
 
 #endif
