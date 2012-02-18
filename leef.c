@@ -222,6 +222,12 @@ int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *pack
         packet->linktype = leef_get_family_link_type(fromaddr.sll_hatype);
 
         if(!leef_adjust_sniffed_packet_buffer(packet)) {
+            static int warned = 0;
+            if(!warned ) {
+              printf("WARNING: could not adjust packet offset for interface %s with link type %d, report the developer\n", ifr.ifr_name, packet->linktype);
+              fflush(stdout);
+              warned = 1;
+            }
             return 0;
         }
 

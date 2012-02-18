@@ -10,6 +10,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <math.h>
 #include <sys/time.h>
 #include <pthread.h>
 
@@ -29,13 +30,13 @@ enum e_action {
 };
 
 /* global variables */
-int running = 1;
+volatile int running = 1;
 uint32_t src_addr = 1;
 const char *interface = NULL;
 const char *hostname = NULL;
 uint32_t dest_addr = 0;
 uint16_t dest_port = 0;
-uint32_t sleep_interval = 10000;
+volatile uint32_t sleep_interval = 10000;
 uint8_t action_uuid = 0;
 uint32_t run_time = 0;
 int action = TCP_PING;
@@ -49,6 +50,7 @@ int drop_on_ack = 0;
 int drop_time = -1;
 int use_tcp_options = 0;
 int fill_data_with_random = 0;
+int pps_output = 0;
 
 uint8_t *get_send_data()
 {
@@ -158,7 +160,6 @@ void conn_flood_sniff_thread()
     int in_queue = 0;
     int conn_ports[65536];
     int i;
-    int abort_warning = 0;
 
     memset(conn_ports, 0, sizeof(conn_ports));
     memset(packets_queue, 0xff, sizeof(tcp_queue_entry) * MAX_PACKETS_QUEUE);
@@ -206,18 +207,20 @@ void conn_flood_sniff_thread()
             if(!running)
                 break;
 
-            if(!quiet) printf("SYN=%d/s SA=%d/s RA=%d/s FA=%d/s PA=%d/s A=%d/s NEW=%d/s FAIL=%d/s ALIVE=%d TX=%.02f Kbps\n",
-                              syn_sent,
-                              synack_received,
-                              rst_received,
-                              fin_received,
-                              push_received,
-                              ack_received,
-                              new_connections,
-                              MAX(syn_sent - new_connections, 0),
-                              alive_connections,
-                              (tx_bytes * 8)/1000.0f);
-            fflush(stdout);
+            if(!quiet) {
+                printf("SYN=%d/s SA=%d/s RA=%d/s FA=%d/s PA=%d/s A=%d/s NEW=%d/s FAIL=%d/s ALIVE=%d TX=%.02f Kbps\n",
+                    syn_sent,
+                    synack_received,
+                    rst_received,
+                    fin_received,
+                    push_received,
+                    ack_received,
+                    new_connections,
+                    MAX(syn_sent - new_connections, 0),
+                    alive_connections,
+                    (tx_bytes * 8)/1000.0f);
+                fflush(stdout);
+            }
 
             synack_received = 0;
             rst_received = 0;
@@ -290,8 +293,10 @@ void conn_flood_sniff_thread()
                 } else if(packet.in_ip.tcp->rst == 1) {
                     static int warned = 0;
                     if(!warned && rst_received >= 0) {
-                        if(!quiet) printf("host started rejecting connections\n");
-                        fflush(stdout);
+                        if(!quiet) {
+                            printf("host started rejecting connections\n");
+                            fflush(stdout);
+                        }
                         warned = 1;
                     }
 
@@ -305,9 +310,10 @@ void conn_flood_sniff_thread()
                 } else if(packet.in_ip.tcp->fin == 1) {
                     static int warned = 0;
                     if(!warned && fin_received == 0) {
-                        if(!quiet) printf("host started ending connections, guessed connection timeout: %d secs\n",
-                               leef_get_ticks() / 1000);
-                        fflush(stdout);
+                        if(!quiet) {
+                            printf("host started ending connections, guessed connection timeout: %d secs\n", leef_get_ticks() / 1000);
+                            fflush(stdout);
+                        }
                         warned = 1;
                     }
 
@@ -358,11 +364,13 @@ void conn_flood_sniff_thread()
                     }
                 /* RST sent by the kernel that aborts the attack*/
                 } else if(packet.in_ip.tcp->rst == 1 && packet.in_ip.tcp->ack == 0) {
-                    if(!abort_warning) {
+                    static int warned = 0;
+                    if(!warned ) {
                         printf("WARNING: cough RST sent by kernel, this means that the kernel is aborting your attacks,\n"
                                "         please make sure that you have the following rule in your iptables firewall:\n"
                                "             iptables -I OUTPUT -p tcp --tcp-flags ALL RST -j DROP\n");
-                        abort_warning = 1;
+                        fflush(stdout);
+                        warned = 1;
                     }
                 }
             }
@@ -370,17 +378,19 @@ void conn_flood_sniff_thread()
     }
 
     connections_fail = total_syn_sent > 0 ? ((total_syn_sent-total_new_connections) * 100.0)/(double)total_syn_sent : .0;
-    if(!quiet) printf("\n--- %s:%d connection flood statistics ---\n",  hostname, dest_port);
-    if(!quiet) printf("%lld SYN sent, %lld ACK sent\n"
-           "%lld SA received, %lld RA received, %lld FA received, %lld PA received, %lld A received\n"
-           "%lld connection made, %lld connections failed, %.02f%% connections failed\n"
-           "%d connections still alive\n"
-           "%lld packets sent, %.02f MB sent\n",
-            total_syn_sent, total_synack_received,
-            total_synack_received, total_rst_received, total_fin_received, total_push_received, total_ack_received,
-            total_new_connections, total_syn_sent - total_new_connections, connections_fail,
-            alive_connections,
-            total_syn_sent+total_synack_received, total_tx_bytes/1000000.0);
+    if(!quiet) {
+        printf("\n--- %s:%d connection flood statistics ---\n",  hostname, dest_port);
+        printf("%lld SYN sent, %lld ACK sent\n"
+               "%lld SA received, %lld RA received, %lld FA received, %lld PA received, %lld A received\n"
+               "%lld connection made, %lld connections failed, %.02f%% connections failed\n"
+               "%d connections still alive\n"
+               "%lld packets sent, %.02f MB sent\n",
+               total_syn_sent, total_synack_received,
+               total_synack_received, total_rst_received, total_fin_received, total_push_received, total_ack_received,
+               total_new_connections, total_syn_sent - total_new_connections, connections_fail,
+               alive_connections,
+               total_syn_sent+total_synack_received, total_tx_bytes/1000000.0);
+    }
 
     leef_terminate(&leef);
     free(packets_queue);
@@ -403,27 +413,43 @@ void interface_tx_thread()
         if(ticks_now - last_ticks >= 1000) {
             txPackets = leef_get_txpackets();
             txBytes = leef_get_txbytes();
+            int pps = (txPackets - lastTxPackets);
             if(!quiet) {
                 if(run_time > 0)
                     printf("%.1f%%, ", (ticks_now/10)/(float)run_time);
                 printf("%s =>  tx_packets: %d pps (%.02f mbps)\n",
-                       interface,
-                       (int)(txPackets - lastTxPackets),
-                       (txBytes - lastTxBytes) * BYTEPSEC_TO_MBITPSEC);
+                    interface,
+                    pps,
+                    (txBytes - lastTxBytes) * BYTEPSEC_TO_MBITPSEC);
+                fflush(stdout);
             }
-            fflush(stdout);
             last_ticks = ticks_now;
             lastTxPackets = txPackets;
             lastTxBytes = txBytes;
+
+            /* tries to adjust a new sleep_interval */
+            if(pps_output > 0) {
+                float error_percent = (pps - pps_output) / (float)pps_output;
+
+                float margin = fabs(error_percent) * sleep_interval;
+                if(margin >= 1.0f) {
+                    int new_sleep_interval = sleep_interval + ceilf(sleep_interval * error_percent);
+                    new_sleep_interval = MAX(new_sleep_interval, 0);
+                    new_sleep_interval = MIN(new_sleep_interval, 1000000);
+                    sleep_interval = new_sleep_interval;
+                }
+            }
         }
         usleep(10 * 1000);
     }
 
     /* print stastistics */
-    if(!quiet) printf("\n--- %s tx statistics ---\n", interface);
-    if(!quiet) printf("%lld packets sent, %.02f MB sent\n",
-                      (long long)(leef_get_txpackets()- initialTxPackets),
-                      (double)(leef_get_txbytes() - initialTxBytes)/1000000.0);
+    if(!quiet) {
+        printf("\n--- %s tx statistics ---\n", interface);
+        printf("%lld packets sent, %.02f MB sent\n",
+            (long long)(leef_get_txpackets()- initialTxPackets),
+            (double)(leef_get_txbytes() - initialTxBytes)/1000000.0);
+    }
 }
 
 void interface_traffic_thread()
@@ -459,13 +485,13 @@ void interface_traffic_thread()
             txDropped = leef_if_tx_dropped(interface);
             txBytes = leef_if_tx_bytes(interface);
             printf("%s =>  rx_packets: %d pps (%.02f mbps)    rx_dropped: %d pps    tx_packets: %d pps (%.02f mbps)    tx_dropped: %d pps\n",
-                   interface,
-                   (int)(rxPackets - lastRxPackets),
-                   (rxBytes - lastRxBytes) * BYTEPSEC_TO_MBITPSEC,
-                   (int)(rxDropped - lastRxDropped),
-                   (int)(txPackets - lastTxPackets),
-                   (txBytes - lastTxBytes) * BYTEPSEC_TO_MBITPSEC,
-                   (int)(txDropped - lastTxDropped));
+                interface,
+                (int)(rxPackets - lastRxPackets),
+                (rxBytes - lastRxBytes) * BYTEPSEC_TO_MBITPSEC,
+                (int)(rxDropped - lastRxDropped),
+                (int)(txPackets - lastTxPackets),
+                (txBytes - lastTxBytes) * BYTEPSEC_TO_MBITPSEC,
+                (int)(txDropped - lastTxDropped));
             fflush(stdout);
             last_ticks = ticks_now;
             lastRxPackets = rxPackets;
@@ -717,39 +743,48 @@ void *tcp_ping_thread(void *param)
                 /* got a ping reply */
                 if(ping_ports[packet.in_ip.tcp->dest] != 0) {
                     rtt = (leef_get_ticks() - ping_ports[packet.in_ip.tcp->dest]);
-                    if(!quiet) printf("port=%d flags=%s ttl=%d size=%d rrt=%d ms\n",
-                           dest_port,
-                           leef_name_tcp_flags(&packet),
-                           packet.ip->ttl,
-                           packet.ip->tot_len,
-                           rtt);
+                    if(!quiet) {
+                        printf("port=%d flags=%s ttl=%d size=%d rrt=%d ms\n",
+                            dest_port,
+                            leef_name_tcp_flags(&packet),
+                            packet.ip->ttl,
+                            packet.ip->tot_len,
+                            rtt);
+                        fflush(stdout);
+                    }
                     ping_ports[packet.in_ip.tcp->dest] = 0;
                     received++;
                     rtt_sum += rtt;
                     min_rtt = MIN(rtt, min_rtt);
                     max_rtt = MAX(rtt, max_rtt);
                 } else {
-                    if(!quiet) printf("DUP! port=%d flags=%s ttl=%d size=%d\n",
-                           dest_port,
-                           leef_name_tcp_flags(&packet),
-                           packet.ip->ttl,
-                           packet.ip->tot_len);
+                    if(!quiet) {
+                        printf("DUP! port=%d flags=%s ttl=%d size=%d\n",
+                            dest_port,
+                            leef_name_tcp_flags(&packet),
+                            packet.ip->ttl,
+                            packet.ip->tot_len);
+                        fflush(stdout);
+                    }
                 }
             }
         }
     }
 
     /* print stastistics */
-    if(!quiet) printf("\n--- %s:%d ping statistics ---\n", hostname, dest_port);
-    if(!quiet) printf("%d packets sent, %d packets received, %.02f%% packet loss\n",
-           sent,
-           received,
-           sent > 0 ? ((sent - received)*100.0f)/(float)sent : .0f);
-    if(received > 0) {
-        if(!quiet) printf("rtt min/avr/max = %d/%d/%d ms\n",
-               min_rtt,
-               (int)(rtt_sum/received),
-               max_rtt);
+    if(!quiet) {
+        printf("\n--- %s:%d ping statistics ---\n", hostname, dest_port);
+        printf("%d packets sent, %d packets received, %.02f%% packet loss\n",
+            sent,
+            received,
+            sent > 0 ? ((sent - received)*100.0f)/(float)sent : .0f);
+
+        if(received > 0) {
+            printf("rtt min/avr/max = %d/%d/%d ms\n",
+                min_rtt,
+                (int)(rtt_sum/received),
+                max_rtt);
+        }
     }
 
     leef_terminate(&leef);
@@ -788,6 +823,7 @@ void print_help(char **argv)
     printf("  -p [port]         - Target port (default: random)\n");
     printf("  -t [time]         - Run time in seconds (default: infinite)\n");
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
+    printf("  -j [pps]          - Calculates a sleep interval for desired packets per second output (accurate with multiple threads)\n");
     printf("  -b [bytes]        - Additional random bytes to send as data (default: 0)\n");
     printf("  -m [threads]      - Number of send threads (default: 1)\n");
     printf("  -s [ip]           - Custom source ip, you may set to 'random' (default: interface ip)\n");
@@ -896,6 +932,9 @@ int main(int argc, char **argv)
                 case 'u':
                     sleep_interval = atoi(argv[++arg]);
                     break;
+                case 'j':
+                    pps_output = atoi(argv[++arg]);
+                    break;
                 case 'q':
                     quiet = 1;
                     break;
@@ -985,6 +1024,10 @@ int main(int argc, char **argv)
             fprintf(stderr, "incorrect option %s, see --help\n", opt);
             return -1;
         }
+    }
+
+    if(pps_output > 0) {
+        sleep_interval = (1000000 / pps_output) * num_threads;
     }
 
     if(send_data_size > 1460) {

@@ -65,6 +65,7 @@ USAGE
       -p [port]         - Target port (default: random)
       -t [time]         - Run time in seconds (default: infinite)
       -u [interval]     - Sleep interval in microseconds (default: 10000)
+      -j [pps]          - Calculates a sleep interval for desired packets per second output (accurate with multiple threads)
       -b [bytes]        - Additional random bytes to send as data (default: 0)
       -m [threads]      - Number of send threads (default: 1)
       -s [ip]           - Custom source ip, you may set to 'random' (default: interface ip)
