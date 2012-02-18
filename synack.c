@@ -94,6 +94,21 @@ uint16_t get_dest_syn_port()
     return dest_port;
 }
 
+void recalculate_sleep_interval(int pps) {
+    /* tries to adjust a new sleep_interval */
+    if(pps_output > 0) {
+        float error_percent = (pps - pps_output) / (float)pps_output;
+
+        float margin = fabs(error_percent) * sleep_interval;
+        if(margin >= 1.0f) {
+            int new_sleep_interval = sleep_interval + ceilf(sleep_interval * error_percent);
+            new_sleep_interval = MAX(new_sleep_interval, 0);
+            new_sleep_interval = MIN(new_sleep_interval, 1000000);
+            sleep_interval = new_sleep_interval;
+        }
+    }
+}
+
 /* Connection flood send thread */
 void *conn_flood_attack_thread(void *param)
 {
@@ -235,6 +250,8 @@ void conn_flood_sniff_thread()
                     (tx_bytes * 8)/1000.0f);
                 fflush(stdout);
             }
+
+            recalculate_sleep_interval(syn_sent);
 
             synack_received = 0;
             rst_received = 0;
@@ -441,18 +458,7 @@ void interface_tx_thread()
             lastTxPackets = txPackets;
             lastTxBytes = txBytes;
 
-            /* tries to adjust a new sleep_interval */
-            if(pps_output > 0) {
-                float error_percent = (pps - pps_output) / (float)pps_output;
-
-                float margin = fabs(error_percent) * sleep_interval;
-                if(margin >= 1.0f) {
-                    int new_sleep_interval = sleep_interval + ceilf(sleep_interval * error_percent);
-                    new_sleep_interval = MAX(new_sleep_interval, 0);
-                    new_sleep_interval = MIN(new_sleep_interval, 1000000);
-                    sleep_interval = new_sleep_interval;
-                }
-            }
+            recalculate_sleep_interval(pps);
         }
         usleep(10 * 1000);
     }
