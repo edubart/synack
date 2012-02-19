@@ -2,7 +2,7 @@ TARGET=synack
 SRCS=leef.c synack.c
 OBJS=${SRCS:.c=.o}
 CC=gcc
-CFLAGS=-Wall -O2
+CFLAGS=-Wall -O3 -fomit-frame-pointer
 LDFLAGS=-s -pthread -lm
 prefix=/usr/local
 
