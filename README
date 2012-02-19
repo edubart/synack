@@ -70,6 +70,7 @@ USAGE
       -m [threads]      - Number of send threads (default: 1)
       -s [ip]           - Custom source ip, you may set to 'random' (default: interface ip)
       -d [binary file]  - Send binary file as data
+      -z [page] [host]  - Send simple HTTP 1.1 request as data
       -f [text file]    - Read a list of IPs from a text file for spoofing
       -o                - Enable tcp options on SYN packets
       -q                - Quiet, don't print statistics output

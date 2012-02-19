@@ -858,6 +858,7 @@ void print_help(char **argv)
     printf("  -m [threads]      - Number of send threads (default: 1)\n");
     printf("  -s [ip]           - Custom source ip, you may set to 'random' (default: interface ip)\n");
     printf("  -d [binary file]  - Send binary file as data\n");
+    printf("  -z [page] [host]  - Send simple HTTP 1.1 request as data\n");
     printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
     printf("  -o                - Enable tcp options on SYN packets\n");
     printf("  -q                - Quiet, don't print statistics output\n");
@@ -1027,6 +1028,14 @@ int main(int argc, char **argv)
                         fprintf(stderr, "could not find data binary file %s\n", argv[arg]);
                         return -1;
                     }
+                    break;
+                }
+                case 'z': {
+                    send_data = (uint8_t *) malloc(2048);
+                    const char *page = argv[++arg];
+                    const char *host = argv[++arg];
+                    sprintf((char*)send_data, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", page, host);
+                    send_data_size = strlen((char*)send_data);
                     break;
                 }
                 case 'o':
