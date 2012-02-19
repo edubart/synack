@@ -132,7 +132,7 @@ uint16_t leef_checksum(register uint16_t *ptr, register int nbytes)
     return (uint16_t)~sum;
 }
 
-int leef_init(struct leef_handle *handle, int flags)
+int leef_init(struct leef_handle *handle, const char *ifname, int flags)
 {
     leef_get_ticks();
 
@@ -151,12 +151,22 @@ int leef_init(struct leef_handle *handle, int flags)
             fprintf(stderr, "Unable to create the raw socket! (Are you root?)\n");
             return 0;
         }
+
+        if(setsockopt(handle->sniff_socket, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname)) == -1) {
+            fprintf(stderr, "Unable to bind socket to interface!\n");
+            return 0;
+        }
     }
 
     if(flags & INJECTING) {
         handle->send_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
         if(handle->send_socket == -1) {
             fprintf(stderr, "Unable to create the raw socket! (Are you root?)\n");
+            return 0;
+        }
+
+        if(setsockopt(handle->send_socket, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname)) == -1) {
+            fprintf(stderr, "Unable to bind socket to interface!\n");
             return 0;
         }
 
@@ -188,7 +198,6 @@ int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *pack
 {
     socklen_t fromlen = sizeof(struct sockaddr_ll);
     struct sockaddr_ll fromaddr;
-    struct ifreq ifr;
     fd_set set;
     struct timeval tv;
     int ss;
@@ -212,9 +221,6 @@ int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *pack
             return 0;
         }
 
-        ifr.ifr_ifindex = fromaddr.sll_ifindex;
-        ioctl(handle->sniff_socket, SIOCGIFNAME, &ifr);
-
         if(ntohs(fromaddr.sll_protocol) != ETH_P_IP) {
             return 0;
         }
@@ -225,7 +231,7 @@ int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *pack
         if(!leef_adjust_sniffed_packet_buffer(packet)) {
             static int warned = 0;
             if(!warned ) {
-              printf("WARNING: could not adjust packet offset for interface %s with link type %d, report the developer\n", ifr.ifr_name, packet->linktype);
+              printf("WARNING: could not adjust packet offset for link type %d, report the developer\n", packet->linktype);
               fflush(stdout);
               warned = 1;
             }

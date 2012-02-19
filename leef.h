@@ -69,7 +69,7 @@ enum e_leef_init_flags {
     SNIFFING_AND_INJECTING  = 0x03
 };
 
-int leef_init(struct leef_handle *handle, int init_flags);
+int leef_init(struct leef_handle *handle, const char *ifname, int init_flags);
 void leef_terminate(struct leef_handle *handle);
 
 void leef_set_sniff_packet_size(struct leef_handle *handle, int size);
