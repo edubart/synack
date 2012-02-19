@@ -16,7 +16,7 @@ ${OBJS}: %.o: %.c *.h
 	${CC} ${CFLAGS} -o $@ -c $<
 
 clean:
-	-rm -f *.o ${TARGET}
+	rm -f *.o ${TARGET}
 
 distclean: clean
 
