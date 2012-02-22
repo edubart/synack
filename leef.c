@@ -342,7 +342,7 @@ int leef_send_raw_tcp(struct leef_handle *handle,
     iph->check = 0;
 
     /* calculate ip checksum */
-    iph->check = leef_checksum((uint16_t *)iph, packet_size);
+    iph->check = leef_checksum((uint16_t *)iph, sizeof(struct iphdr));
 
     /* send the packet */
     sktsin.sin_addr.s_addr = dest_addr;
@@ -422,7 +422,7 @@ int leef_send_raw_udp(struct leef_handle *handle,
     iph->check = 0;
 
     /* calculate ip checksum */
-    iph->check = leef_checksum((uint16_t *)iph, packet_size);
+    iph->check = leef_checksum((uint16_t *)iph, sizeof(struct iphdr));
 
     /* send the packet */
     sktsin.sin_addr.s_addr = dest_addr;
