@@ -19,9 +19,10 @@
 #include <net/if_arp.h>
 #include <arpa/inet.h>
 #include <linux/if_packet.h>
-#include <linux/if_ether.h>
 #include <linux/if_fddi.h>
 #include <pthread.h>
+
+#define MSG_RAWSENDTO 0x20000
 
 struct pseudo_header {
     uint32_t saddr, daddr;
@@ -144,6 +145,7 @@ int leef_init(struct leef_handle *handle, const char *ifname, int flags)
     handle->send_socket = -1;
     handle->sniff_socket = -1;
     handle->sniff_size = SNIFF_BUFFER_SIZE;
+    handle->rawsendto = 0;
 
     if(flags & SNIFFING) {
         handle->sniff_socket = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
@@ -177,6 +179,14 @@ int leef_init(struct leef_handle *handle, const char *ifname, int flags)
         }
     }
     return 1;
+}
+
+void leef_enable_rawsendto(struct leef_handle *handle, uint8_t src_mac[6], uint8_t dest_mac[6])
+{
+    memcpy(handle->eth.h_source, src_mac, 6);
+    memcpy(handle->eth.h_dest, dest_mac, 6);
+    handle->eth.h_proto = htons(ETH_P_IP);
+    handle->rawsendto = 1;
 }
 
 void leef_terminate(struct leef_handle *handle)
@@ -275,13 +285,16 @@ int leef_send_raw_tcp(struct leef_handle *handle,
                       uint16_t data_size, uint8_t *data)
 {
     struct sockaddr_in sktsin;
-    struct pseudo_header *pseudoh = (struct pseudo_header *)(handle->send_buf + sizeof(struct iphdr) - sizeof(struct pseudo_header));
-    struct iphdr *iph = (struct iphdr *)handle->send_buf;
-    struct tcphdr *tcph = (struct tcphdr *)(handle->send_buf + sizeof(struct iphdr));
-    uint8_t *packet_buff = handle->send_buf;
+    uint8_t *packet_buff = handle->send_buf + ETH_HLEN;
+    struct pseudo_header *pseudoh = (struct pseudo_header *)(packet_buff + sizeof(struct iphdr) - sizeof(struct pseudo_header));
+    struct iphdr *iph = (struct iphdr *)packet_buff;
+    struct tcphdr *tcph = (struct tcphdr *)(packet_buff + sizeof(struct iphdr));
     uint16_t packet_size = sizeof(struct iphdr) + sizeof(struct tcphdr) + tcp_options_size + data_size;
     uint16_t protocol_len = sizeof(struct tcphdr) + tcp_options_size + data_size;
 
+    uint8_t *buff;
+    uint16_t buff_size;
+    int sflags;
 
     /* build tcp header */
     tcph->source = htons(src_port);
@@ -335,9 +348,21 @@ int leef_send_raw_tcp(struct leef_handle *handle,
     sktsin.sin_addr.s_addr = dest_addr;
     sktsin.sin_family = AF_INET;
     sktsin.sin_port = 0;
+
+    if(handle->rawsendto) {
+        buff = handle->send_buf;
+        buff_size = packet_size + ETH_HLEN;
+        sflags = MSG_RAWSENDTO;
+        memcpy(buff, (char*)&handle->eth, ETH_HLEN);
+    } else {
+        buff = packet_buff;
+        buff_size = packet_size;
+        sflags = 0;
+    }
+
     int sent = sendto(handle->send_socket,
-                      packet_buff, packet_size,
-                      0,
+                      buff, buff_size,
+                      sflags,
                       (struct sockaddr *)&sktsin,
                       sizeof(struct sockaddr));
     if(sent > 0) {
@@ -355,12 +380,16 @@ int leef_send_raw_udp(struct leef_handle *handle,
                       uint16_t data_size, uint8_t *data)
 {
     struct sockaddr_in sktsin;
-    struct pseudo_header *pseudoh = (struct pseudo_header *)(handle->send_buf + sizeof(struct iphdr) - sizeof(struct pseudo_header));
-    struct iphdr *iph = (struct iphdr *)handle->send_buf;
-    struct udphdr *udph = (struct udphdr *)(handle->send_buf + sizeof(struct iphdr));
-    uint8_t *packet_buff = handle->send_buf;
+    uint8_t *packet_buff = handle->send_buf + ETH_HLEN;
+    struct pseudo_header *pseudoh = (struct pseudo_header *)(packet_buff + sizeof(struct iphdr) - sizeof(struct pseudo_header));
+    struct iphdr *iph = (struct iphdr *)packet_buff;
+    struct udphdr *udph = (struct udphdr *)(packet_buff + sizeof(struct iphdr));
     uint16_t packet_size = sizeof(struct iphdr) + sizeof(struct udphdr) + data_size;
     uint16_t protocol_len = sizeof(struct udphdr) + data_size;
+
+    uint8_t *buff;
+    uint16_t buff_size;
+    int sflags;
 
     /* build udp header */
     udph->source = htons(src_port);
@@ -399,9 +428,21 @@ int leef_send_raw_udp(struct leef_handle *handle,
     sktsin.sin_addr.s_addr = dest_addr;
     sktsin.sin_family = AF_INET;
     sktsin.sin_port = 0;
+
+    if(handle->rawsendto) {
+        buff = handle->send_buf;
+        buff_size = packet_size + ETH_HLEN;
+        sflags = MSG_RAWSENDTO;
+        memcpy(buff, (char*)&handle->eth, ETH_HLEN);
+    } else {
+        buff = packet_buff;
+        buff_size = packet_size;
+        sflags = 0;
+    }
+
     int sent = sendto(handle->send_socket,
-                      packet_buff, packet_size,
-                      0,
+                      buff, buff_size,
+                      sflags,
                       (struct sockaddr *)&sktsin,
                       sizeof(struct sockaddr));
     if(sent > 0) {

