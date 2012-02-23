@@ -81,40 +81,41 @@
       --help            - Print this help
 
 == TIPS
-  How to generate spoof ips list
-    # on target machine
-    tcpdump -i eth1 tcp port 9999 -n -t -c 3000000 > spoofsniff
-    cat spoof_sniff | awk '{print $2}' | sed 's/^\(.*\)\..*$/\1/' | sort | uniq > spoofips
+How to generate spoof ips list
+  # on target machine
+  tcpdump -i eth1 tcp port 9999 -n -t -c 3000000 > spoofsniff
+  cat spoof_sniff | awk '{print $2}' | sed 's/^\(.*\)\..*$/\1/' | sort | uniq > spoofips
 
-    # on source machine
-    synack -i eth1 -s random -h x.x.x.x -M -t 300 -p 9999 -m 100 -j 10000
+  # on source machine
+  synack -i eth1 -s random -h x.x.x.x -M -t 300 -p 9999 -m 100 -j 10000
 
-  Speed up tips:
-    # enable XPS
-    echo f > /sys/class/net/eth1/queues/tx-0/xps_cpus
+How to speed up throughtput got get more pps (packets per second)
+  # enable XPS
+  echo f > /sys/class/net/eth1/queues/tx-0/xps_cpus
 
-    # increase txqueuelen
-    ifconfig eth1 txqueuelen 100000
+  # increase txqueuelen
+  ifconfig eth1 txqueuelen 100000
 
-    # increase interface tx ring buffer
-    ethtool -G eth1 tx 4096
+  # increase interface tx ring buffer
+  ethtool -G eth1 tx 4096
 
-    # enable 1000mbps full duplex
-    ethtool -s eth1 speed 1000 duplex full
+  # enable 1000mbps full duplex
+  ethtool -s eth1 speed 1000 duplex full
 
-    # use patched kernel with rawsendto for even more throughtput on debian systems
-    # in the menuconfig make sure you do the following:
-    # * disable optimize for size
-    # * select you cpu architeture
-    # * enable preemption,
-    # * change timer clock to 1000Hz,
-    wget http://www.kernel.org/pub/linux/kernel/v3.0/linux-3.2.7.tar.bz2
-    tar xjf linux-3.2.7.tar.bz2
-    cd linux-3.2.7
-    cp /boot/config-2.6.32-5-amd64 .config
-    patch -p1 < rawsendto.patch
-    make menuconfig
-    fakeroot make-kpkg clean
-    fakeroot make-kpkg --append-to-version="-rawsendto" --initrd --us --uc -j4 kernel_image kernel_headers
-    sudo dpkg -i linux-image-3.2.7-rawsendto_3.2.7-rawsendto-10.00.Custom_amd64.deb
-    sudo reboot
+  # patch kernel with rawsendto to enable option -k for even more throughtput
+  # in the menuconfig make sure you do the following:
+  # * disable optimize for size
+  # * select you cpu architeture
+  # * enable preemption,
+  # * change timer clock to 1000Hz,
+  sudo apt-get install build-essential kernel-package
+  wget http://www.kernel.org/pub/linux/kernel/v3.0/linux-3.2.7.tar.bz2
+  tar xjf linux-3.2.7.tar.bz2
+  cd linux-3.2.7
+  cp /boot/config-2.6.32-5-amd64 .config
+  patch -p1 < rawsendto.patch
+  make menuconfig
+  fakeroot make-kpkg clean
+  fakeroot make-kpkg --append-to-version="-rawsendto" --initrd --us --uc -j4 kernel_image kernel_headers
+  sudo dpkg -i linux-image-3.2.7-rawsendto_3.2.7-rawsendto-10.00.Custom_amd64.deb
+  sudo reboot
