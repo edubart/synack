@@ -593,6 +593,15 @@ char *leef_addr_to_string(uint32_t addr)
     return inet_ntoa(*(struct in_addr*)&addr);
 }
 
+uint32_t leef_net_mask(int bits)
+{
+    uint32_t mask = 0;
+    uint32_t bit;
+    for(bit = 0; bit < bits; ++bit)
+        mask |= (1 << bit);
+    return mask;
+}
+
 uint32_t leef_get_ticks() {
     static unsigned long firstTick = 0;
     struct timeval tv;
@@ -668,6 +677,28 @@ uint32_t leef_if_ipv4(const char *devname)
     return *(uint32_t *)(&((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
 }
 
+uint32_t unwated_spoofs[100][2];
+int unwated_spoofs_size = 0;
+
+void leef_add_unwanted_spoof(const char *ip, int mask)
+{
+    unwated_spoofs[unwated_spoofs_size][0] = leef_string_to_addr(ip);
+    unwated_spoofs[unwated_spoofs_size][1] = leef_net_mask(mask);
+    unwated_spoofs_size++;
+}
+
+void leef_build_unwated_spoofs_list()
+{
+    leef_add_unwanted_spoof("0.0.0.0", 8);
+    leef_add_unwanted_spoof("127.0.0.0", 8);
+    leef_add_unwanted_spoof("10.0.0.0", 8);
+    leef_add_unwanted_spoof("172.16.0.0", 12);
+    leef_add_unwanted_spoof("192.168.0.0", 16);
+    leef_add_unwanted_spoof("224.0.0.0", 3);
+    leef_add_unwanted_spoof("169.254.0.0", 16);
+    leef_add_unwanted_spoof("240.0.0.0", 5);
+}
+
 uint16_t leef_random_dst_syn_port()
 {
     static uint16_t common_ports[10] = { 21, 22, 23, 25, 80, 110, 143, 443, 3306, 8080 };
@@ -677,3 +708,30 @@ uint16_t leef_random_dst_syn_port()
     return dest_port;
 }
 
+uint32_t leef_random_ip()
+{
+    uint32_t addr = 0;
+    addr |= leef_random_range(1, 254) << 0;
+    addr |= leef_random_range(0, 254) << 8;
+    addr |= leef_random_range(0, 254) << 16;
+    addr |= leef_random_range(1, 254) << 24;
+    return addr;
+}
+
+int leef_is_valid_spoofed_ip(uint32_t addr)
+{
+    int i;
+    for(i=0;i<unwated_spoofs_size;++i)
+        if((addr & unwated_spoofs[i][1]) == unwated_spoofs[i][0])
+            return 0;
+    return 1;
+}
+
+uint32_t leef_random_spoofed_ip()
+{
+    uint32_t addr;
+    do {
+        addr = leef_random_ip();
+    } while(!leef_is_valid_spoofed_ip(addr));
+    return addr;
+}

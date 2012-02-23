@@ -13,9 +13,11 @@
 #include <math.h>
 #include <sys/time.h>
 #include <pthread.h>
+#include <ctype.h>
 
 #define MAX(a,b) (a > b ? a : b)
 #define MIN(a,b) (a < b ? a : b)
+#define SWAP(a,b) { int t = b; b = a; a = t; }
 
 enum e_action {
     TCP_PING,
@@ -55,17 +57,23 @@ uint8_t src_mac[6];
 uint8_t dest_mac[6];
 int rawsendto = 0;
 
-void shuffle(int *array, int n)
+char *ltrim(char *s)
 {
-    if(n > 1) {
-        size_t i;
-        for (i = 0; i < n - 1; i++) {
-            size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
-            int t = array[j];
-            array[j] = array[i];
-            array[i] = t;
-        }
-    }
+    while(isspace(*s)) s++;
+    return s;
+}
+
+char *rtrim(char *s)
+{
+    char* back = s + strlen(s);
+    while(isspace(*--back));
+    *(back+1) = '\0';
+    return s;
+}
+
+char *trim(char *s)
+{
+    return rtrim(ltrim(s));
 }
 
 uint8_t *get_send_data()
@@ -84,14 +92,18 @@ uint8_t *get_send_data()
 uint32_t get_src_ip()
 {
     if(spoof_addresses_size > 0) {
-        static int id = 0;
-        if(id >= spoof_addresses_size)
-            id = 0;
-        return spoof_addresses[id++];
-    }
-    if(src_addr == 0)
-        return leef_random_u32();
-    return src_addr;
+        /* shuffle ips list */
+        static int i = 0;
+        int j = i + leef_rand() / (LEEF_MAX_RAND / (spoof_addresses_size - i) + 1);
+        SWAP(spoof_addresses[i], spoof_addresses[j]);
+        uint32_t ip = spoof_addresses[i++];
+        if(i >= spoof_addresses_size-1)
+            i = 0;
+        return ip;
+    } else if(src_addr == 0)
+        return leef_random_spoofed_ip();
+    else
+        return src_addr;
 }
 
 uint16_t get_dest_port()
@@ -1024,7 +1036,8 @@ int main(int argc, char **argv)
                     FILE *fp = fopen(argv[++arg], "r");
                     if(fp) {
                         char ip[32];
-                        int ch;
+                        int num_ips;
+                        char ch;
 
                         printf("reading spoofed ip addresses...\n");
                         fflush(stdout);
@@ -1040,25 +1053,22 @@ int main(int argc, char **argv)
 
                         fseek(fp, 0, SEEK_SET);
 
-                        ch = 0;
+                        num_ips = 0;
                         while(!feof(fp)) {
-                            fgets(ip, 32, fp);
-                            char *c;
-                            while((c = strchr(ip, '\n')) ||
-                                  (c = strchr(ip, '\r')) ||
-                                  (c = strchr(ip, ' ')))
-                                c[0] = 0;
+                            if(!fgets(ip, 32, fp))
+                                break;
+                            char *c = trim(ip);
+                            if(strlen(c) < 7)
+                                continue;
                             uint32_t addr = leef_string_to_addr(ip);
-                            if(addr != 0)
-                                spoof_addresses[ch++] = addr;
+                            if(addr != 0 && addr != (uint32_t)-1)
+                                spoof_addresses[num_ips++] = addr;
                         }
                         fclose(fp);
 
-                        spoof_addresses_size = ch;
+                        spoof_addresses_size = num_ips-1;
 
-                        printf("done, read %d ips\nshuffling spoofed ips list...", spoof_addresses_size);
-                        shuffle((int*)spoof_addresses, spoof_addresses_size);
-                        printf(" [done]\n");
+                        printf("done, read %d ips\n", spoof_addresses_size);
                     } else {
                         fprintf(stderr, "failed opening spoofing IPs text file!\n");
                         return -1;
@@ -1148,6 +1158,9 @@ int main(int argc, char **argv)
 
     /* force first tick */
     leef_get_ticks();
+
+    /* build spoofed ips filter */
+    leef_build_unwated_spoofs_list();
 
     /* run the action */
     int i;

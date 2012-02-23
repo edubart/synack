@@ -119,6 +119,7 @@ const char *leef_name_tcp_flags(leef_sniffed_packet *packet);
 uint32_t leef_resolve_hostname(const char *hostname);
 uint32_t leef_string_to_addr(const char *str);
 char *leef_addr_to_string(uint32_t addr);
+uint32_t leef_net_mask(int bits);
 uint32_t leef_get_ticks();
 int64_t leef_proc_read_int64(const char *path);
 int64_t leef_if_tx_packets(const char *devname);
@@ -134,6 +135,9 @@ extern volatile unsigned long leef_txbytes;
 static inline unsigned long leef_get_txpackets() { return leef_txpackets; }
 static inline unsigned long leef_get_txbytes() { return leef_txbytes; }
 
+void leef_add_unwanted_spoof(const char *ip, int mask);
+void leef_build_unwated_spoofs_list();
+
 /* fast random implementation */
 #define LEEF_MAX_RAND 65536
 
@@ -148,15 +152,10 @@ static inline int leef_rand() {
     return ((unsigned)(leef_next_rand_seed/65536) % LEEF_MAX_RAND);
 }
 
+/* note the max range is LEEF_MAX_RAND */
 static inline int leef_random_range(int min, int max) {
-    if(min > max) {
-        int tmp = max;
-        max = min;
-        min = tmp;
-    }
-    double range = max - min + 1;
-    int ret = (min + ((int)((range * leef_rand())/ (LEEF_MAX_RAND+1.0))));
-    return ret;
+    int range = max - min + 1;
+    return (min + (leef_rand() % range));
 }
 
 static inline uint8_t leef_random_byte() { return (uint8_t)(leef_rand() % 256); }
@@ -165,5 +164,9 @@ static inline uint32_t leef_random_u32() { return (uint32_t)(leef_random_u16() <
 static inline uint16_t leef_random_src_port() { return 32769 + (leef_rand() % 28231); }
 static inline uint16_t leef_random_dst_port() { return 1 + (leef_rand() % 65535); }
 uint16_t leef_random_dst_syn_port();
+
+uint32_t leef_random_ip();
+int leef_is_valid_spoofed_ip(uint32_t addr);
+uint32_t leef_random_spoofed_ip();
 
 #endif
