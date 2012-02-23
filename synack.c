@@ -71,12 +71,10 @@ uint8_t *get_send_data()
 uint32_t get_src_ip()
 {
     if(spoof_addresses_size > 0) {
-        int id;
-        if(spoof_addresses_size > 1)
-            id = leef_random_range(0, spoof_addresses_size-1);
-        else
+        static int id = 0;
+        if(id >= spoof_addresses_size)
             id = 0;
-        return spoof_addresses[id];
+        return spoof_addresses[id++];
     }
     if(src_addr == 0)
         return leef_random_u32();
