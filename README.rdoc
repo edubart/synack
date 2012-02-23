@@ -1,18 +1,18 @@
-ABOUT
+== ABOUT
   Tool created for testing DDOS/DOS attacks. Supports SYN, UDP, TCP connection,
   ACK, PUSH+ACK and mixed floods. Created FOR EDUCATIONAL AND TESTING purposes
   only.
 
-AUTHOR
+== AUTHOR
   edubart - https://github.com/edubart
 
-INSTALL
+== INSTALL
   Installation steps:
     $ git clone git://github.com/edubart/synack.git
     $ make
     $ sudo make install
 
-FLOODS DESCRIPTION
+== FLOODS DESCRIPTION
   TCP Ping
     Ping a TCP port by seding simple SYN packet, option created
     just to see the target responsiveness.
@@ -47,7 +47,7 @@ FLOODS DESCRIPTION
       S = TCP with flag SYN set
       A = TCP with flag ACK set
 
-USAGE
+== USAGE
   synack -i <interface> -h <host> [action] [options]
   Actions:
       -P                - TCP ping (default action)
@@ -80,7 +80,7 @@ USAGE
       -c [count]        - Max number of packets to send
       --help            - Print this help
 
-TIPS
+== TIPS
   How to generate spoof ips list
     # on target machine
     tcpdump -i eth1 tcp port 9999 -n -t -c 3000000 > spoofsniff
