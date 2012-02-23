@@ -77,3 +77,12 @@ USAGE
       -x                - Drop established connections when receive ACK packets
       -y [delay]        - Drop established connections after delay
       --help            - Print this help
+
+TIPS
+  How to generate spoof ips list
+    # on target machine
+    tcpdump -i eth1 tcp port 9999 -n -t -c 3000000 > spoofsniff
+    cat spoof_sniff | awk '{print $2}' | sed 's/^\(.*\)\..*$/\1/' | sort | uniq > spoofips
+
+    # on source machine
+    synack -i eth1 -s random -h x.x.x.x -M -t 300 -p 9999 -m 100 -j 10000
