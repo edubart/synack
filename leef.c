@@ -590,7 +590,9 @@ uint32_t leef_string_to_addr(const char *str)
 
 char *leef_addr_to_string(uint32_t addr)
 {
-    return inet_ntoa(*(struct in_addr*)&addr);
+    struct in_addr in;
+    in.s_addr = addr;
+    return inet_ntoa(in);
 }
 
 uint32_t leef_net_mask(int bits)
