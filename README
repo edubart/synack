@@ -76,6 +76,8 @@ USAGE
       -q                - Quiet, don't print statistics output
       -x                - Drop established connections when receive ACK packets
       -y [delay]        - Drop established connections after delay
+      -k [smac] [dmac]  - Use rawsendto kernel patch to send massive kpps
+      -c [count]        - Max number of packets to send
       --help            - Print this help
 
 TIPS

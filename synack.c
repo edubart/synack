@@ -56,6 +56,7 @@ int pps_output = 0;
 uint8_t src_mac[6];
 uint8_t dest_mac[6];
 int rawsendto = 0;
+uint32_t max_send_packets = 0;
 
 char *ltrim(char *s)
 {
@@ -884,14 +885,14 @@ void *tcp_ping_thread(void *param)
 
 void *run_timer_thread(void *param)
 {
-    int i, j;
-    if(run_time > 0) {
-        for(i=0;i<run_time && running;++i) {
-            for(j=0;j<10 && running;++j)
-                usleep(100*1000);
-        }
-        running = 0;
+    while(running) {
+        if(run_time > 0 && leef_get_ticks() / 1000 >= run_time)
+            break;
+        if(max_send_packets > 0 && leef_get_txpackets() >= max_send_packets)
+            break;
+        usleep(10*1000);
     }
+    running = 0;
     return NULL;
 }
 
@@ -910,7 +911,7 @@ void print_help(char **argv)
     printf("  -O                - Monitor interface traffic\n");
     printf("General options:\n");
     printf("  -i [interface]    - Which interface to do the action (required)\n");
-    printf("  -h [host]         - Target host (required)\n");
+    printf("  -h [host]         - Target hosts separated by comma (required)\n");
     printf("  -p [port]         - Target port (default: random)\n");
     printf("  -t [time]         - Run time in seconds (default: infinite)\n");
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
@@ -926,6 +927,7 @@ void print_help(char **argv)
     printf("  -x                - Drop established connections when receive ACK packets\n");
     printf("  -y [delay]        - Drop established connections after delay\n");
     printf("  -k [smac] [dmac]  - Use rawsendto kernel patch to send massive kpps\n");
+    printf("  -c [count]        - Max number of packets to send\n");
     printf("  --help            - Print this help\n");
 }
 
@@ -1120,6 +1122,9 @@ int main(int argc, char **argv)
                     read_macaddr(dest_mac, argv[++arg]);
                     rawsendto = 1;
                     break;
+                case 'c':
+                    max_send_packets = atoi(argv[++arg]);
+                    break;
                 default:
                     fprintf(stderr, "incorrect option %s, see --help\n", opt);
                     return -1;
@@ -1134,7 +1139,7 @@ int main(int argc, char **argv)
     }
 
     if(pps_output > 0) {
-        sleep_interval = (1000000 / pps_output) * num_threads;
+        sleep_interval = MIN(((1000000 / pps_output) * num_threads), 1000000);
     }
 
     if(send_data_size > 1460) {
