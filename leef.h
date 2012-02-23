@@ -162,8 +162,8 @@ static inline uint8_t leef_random_byte() { return (uint8_t)(leef_rand() % 256); 
 static inline uint16_t leef_random_u16() { return (uint16_t)leef_rand(); }
 static inline uint32_t leef_random_u32() { return (uint32_t)(leef_random_u16() << 16 | leef_random_u16()); }
 static inline uint16_t leef_random_src_port() { return 32769 + (leef_rand() % 28231); }
-static inline uint16_t leef_random_dst_port() { return 1 + (leef_rand() % 65535); }
-uint16_t leef_random_dst_syn_port();
+static inline uint16_t leef_random_dest_port() { return 1 + (leef_rand() % 65535); }
+uint16_t leef_random_dest_syn_port();
 
 uint32_t leef_random_ip();
 int leef_is_valid_spoofed_ip(uint32_t addr);

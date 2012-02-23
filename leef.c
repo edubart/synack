@@ -701,10 +701,10 @@ void leef_build_unwated_spoofs_list()
     leef_add_unwanted_spoof("240.0.0.0", 5);
 }
 
-uint16_t leef_random_dst_syn_port()
+uint16_t leef_random_dest_syn_port()
 {
     static uint16_t common_ports[10] = { 21, 22, 23, 25, 80, 110, 143, 443, 3306, 8080 };
-    uint32_t dest_port = leef_random_dst_port();
+    uint32_t dest_port = leef_random_dest_port();
     if(dest_port > 32768)
         dest_port = common_ports[dest_port % 10];
     return dest_port;
