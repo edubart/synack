@@ -55,6 +55,19 @@ uint8_t src_mac[6];
 uint8_t dest_mac[6];
 int rawsendto = 0;
 
+void shuffle(int *array, int n)
+{
+    if(n > 1) {
+        size_t i;
+        for (i = 0; i < n - 1; i++) {
+            size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+            int t = array[j];
+            array[j] = array[i];
+            array[i] = t;
+        }
+    }
+}
+
 uint8_t *get_send_data()
 {
     int i;
@@ -913,6 +926,7 @@ int main(int argc, char **argv)
     /* catch signals */
     signal(SIGTERM, &signal_handler);
     signal(SIGINT, &signal_handler);
+    srand(time(NULL));
 
     if(argc == 1) {
         print_help(argv);
@@ -1042,7 +1056,9 @@ int main(int argc, char **argv)
 
                         spoof_addresses_size = ch;
 
-                        printf("done, read %d ips\n", spoof_addresses_size);
+                        printf("done, read %d ips\nshuffling spoofed ips list...", spoof_addresses_size);
+                        shuffle((int*)spoof_addresses, spoof_addresses_size);
+                        printf(" [done]\n");
                     } else {
                         fprintf(stderr, "failed opening spoofing IPs text file!\n");
                         return -1;
