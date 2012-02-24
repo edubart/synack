@@ -61,6 +61,7 @@ edubart - https://github.com/edubart
   General options:
       -i [interface]    - Which interface to do the action (required)
       -h [host,host2]   - Target hosts separated by comma, accepts 'host:port' syntax too (required)
+      -H [targets file] - Targets in a file where each line is in ip:port format
       -p [port]         - Target port (default: random)
       -t [time]         - Run time in seconds (default: infinite)
       -u [interval]     - Sleep interval in microseconds (default: 10000)

