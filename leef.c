@@ -479,7 +479,7 @@ int leef_send_raw_tcp2(struct leef_handle *handle,
     static uint16_t typical_windows[] = {5840, 8192, 16384, 65535};
     static uint8_t typical_ttls[] = {64, 128};
 
-    uint8_t ttl = typical_ttls[leef_rand() % sizeof(typical_ttls)] - (rand() % 5);
+    uint8_t ttl = typical_ttls[leef_rand() % sizeof(typical_ttls)] - (leef_rand() % 5);
     uint16_t window = typical_windows[leef_rand() % (sizeof(typical_windows) / 2)];
     uint16_t frag_off = 0x40; /* don't fragment */
 

@@ -94,7 +94,7 @@ uint32_t get_src_ip()
     if(spoof_addresses_size > 0) {
         /* shuffle ips list */
         static int i = 0;
-        int j = i + leef_rand() / (LEEF_MAX_RAND / (spoof_addresses_size - i) + 1);
+        int j = i + (leef_rand() / ((LEEF_RAND_MAX / (spoof_addresses_size - i)) + 1));
         SWAP(spoof_addresses[i], spoof_addresses[j]);
         uint32_t ip = spoof_addresses[i++];
         if(i >= spoof_addresses_size-1)

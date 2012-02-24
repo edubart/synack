@@ -107,8 +107,8 @@ How to speed up throughput to get more pps (packets per second)
   # in the menuconfig make sure you do the following:
   # * disable optimize for size
   # * select you cpu architeture
-  # * enable preemption,
-  # * change timer clock to 1000Hz,
+  # * disable preemption
+  # * change timer clock to 100Hz,
   sudo apt-get install build-essential kernel-package
   wget http://www.kernel.org/pub/linux/kernel/v3.0/linux-3.2.7.tar.bz2
   tar xjf linux-3.2.7.tar.bz2
@@ -118,5 +118,6 @@ How to speed up throughput to get more pps (packets per second)
   make menuconfig
   fakeroot make-kpkg clean
   fakeroot make-kpkg --append-to-version="-rawsendto" --initrd --us --uc -j4 kernel_image kernel_headers
+  cd ..
   sudo dpkg -i linux-image-3.2.7-rawsendto_3.2.7-rawsendto-10.00.Custom_amd64.deb
   sudo reboot

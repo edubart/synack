@@ -136,27 +136,28 @@ static inline unsigned long leef_get_txpackets() { return leef_txpackets; }
 static inline unsigned long leef_get_txbytes() { return leef_txbytes; }
 
 /* fast random implementation */
-#define LEEF_MAX_RAND 65536
+#define LEEF_RAND_MAX 2147483647
 
 extern __thread unsigned long leef_next_rand_seed;
 
-static inline void leef_srand(unsigned long next_rand_seed) {
-    leef_next_rand_seed = next_rand_seed;
+static inline void leef_srand(unsigned long seed) {
+    leef_next_rand_seed = seed;
 }
+
 
 static inline int leef_rand() {
     leef_next_rand_seed = leef_next_rand_seed * 1103515245 + 12345;
-    return ((unsigned)(leef_next_rand_seed/65536) % LEEF_MAX_RAND);
+    return (unsigned)(leef_next_rand_seed % ((unsigned long)LEEF_RAND_MAX+1));
 }
 
-/* note the max range is LEEF_MAX_RAND */
+/* note the max range is LEEF_RAND_MAX */
 static inline int leef_random_range(int min, int max) {
     int range = max - min + 1;
     return (min + (leef_rand() % range));
 }
 
 static inline uint8_t leef_random_byte() { return (uint8_t)(leef_rand() % 256); }
-static inline uint16_t leef_random_u16() { return (uint16_t)leef_rand(); }
+static inline uint16_t leef_random_u16() { return (uint16_t)leef_rand() % 65536; }
 static inline uint32_t leef_random_u32() { return (uint32_t)(leef_random_u16() << 16 | leef_random_u16()); }
 static inline uint16_t leef_random_src_port() { return 32769 + (leef_rand() % 28231); }
 static inline uint16_t leef_random_dest_port() { return 1 + (leef_rand() % 65535); }
