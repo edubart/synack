@@ -83,11 +83,12 @@ edubart - https://github.com/edubart
 == TIPS
 How to generate spoof ips list
   # on target machine
-  tcpdump -i eth1 tcp port 9999 -n -t -c 3000000 > spoofsniff
-  cat spoof_sniff | awk '{print $2}' | sed 's/^\(.*\)\..*$/\1/' | sort | uniq > spoofips
+  iptables -I INPUT -p tcp --dport 9999 -j DROP
+  tcpdump -i eth0 tcp port 9999 -n -t -c 1100000 > spoofsniff
+  cat spoofsniff | awk '{print $2}' | sed 's/^\(.*\)\..*$/\1/' | sort | uniq > spoofips
 
   # on source machine
-  synack -i eth1 -s random -h x.x.x.x -M -t 300 -p 9999 -m 100 -j 10000
+  synack -i eth0 -s random -h target -A -p 9999 -m 10 -j 1000
 
 How to speed up throughput to get more pps (packets per second)
   # enable XPS
