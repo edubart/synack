@@ -1,16 +1,15 @@
-== ABOUT
-  Tool created for testing DDOS/DOS attacks. Supports SYN, UDP, TCP connection,
-  ACK, PUSH+ACK and mixed floods. Created FOR EDUCATIONAL AND TESTING purposes
-  only.
+== About
+Tool created for testing DDOS/DOS attacks. Supports SYN, UDP, TCP connection,
+ACK, PUSH+ACK and mixed floods. Created FOR EDUCATIONAL AND TESTING purposes
+only.
 
-== AUTHOR
-  edubart - https://github.com/edubart
+== Author
+edubart - https://github.com/edubart
 
-== INSTALL
-  Installation steps:
-    $ git clone git://github.com/edubart/synack.git
-    $ make
-    $ sudo make install
+== Install
+  $ git clone git://github.com/edubart/synack.git
+  $ make
+  $ sudo make install
 
 == FLOODS DESCRIPTION
   TCP Ping
@@ -80,6 +79,7 @@
       -c [count]        - Max number of packets to send
       --help            - Print this help
 
+      == 
 == TIPS
 How to generate spoof ips list
   # on target machine
@@ -89,7 +89,7 @@ How to generate spoof ips list
   # on source machine
   synack -i eth1 -s random -h x.x.x.x -M -t 300 -p 9999 -m 100 -j 10000
 
-How to speed up throughtput got get more pps (packets per second)
+How to speed up throughput to get more pps (packets per second)
   # enable XPS
   echo f > /sys/class/net/eth1/queues/tx-0/xps_cpus
 
@@ -102,7 +102,7 @@ How to speed up throughtput got get more pps (packets per second)
   # enable 1000mbps full duplex
   ethtool -s eth1 speed 1000 duplex full
 
-  # patch kernel with rawsendto to enable option -k for even more throughtput
+  # patch kernel with rawsendto to enable option -k for even more throughput
   # in the menuconfig make sure you do the following:
   # * disable optimize for size
   # * select you cpu architeture

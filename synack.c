@@ -101,7 +101,7 @@ uint32_t get_src_ip()
             i = 0;
         return ip;
     } else if(src_addr == 0)
-        return leef_random_spoofed_ip();
+        return leef_random_ip();
     else
         return src_addr;
 }
@@ -1233,9 +1233,6 @@ int main(int argc, char **argv)
 
     /* force first tick */
     leef_get_ticks();
-
-    /* build spoofed ips filter */
-    leef_build_unwated_spoofs_list();
 
     /* run the action */
     int i;

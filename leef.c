@@ -679,28 +679,6 @@ uint32_t leef_if_ipv4(const char *devname)
     return *(uint32_t *)(&((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
 }
 
-uint32_t unwated_spoofs[100][2];
-int unwated_spoofs_size = 0;
-
-void leef_add_unwanted_spoof(const char *ip, int mask)
-{
-    unwated_spoofs[unwated_spoofs_size][0] = leef_string_to_addr(ip);
-    unwated_spoofs[unwated_spoofs_size][1] = leef_net_mask(mask);
-    unwated_spoofs_size++;
-}
-
-void leef_build_unwated_spoofs_list()
-{
-    leef_add_unwanted_spoof("0.0.0.0", 8);
-    leef_add_unwanted_spoof("127.0.0.0", 8);
-    leef_add_unwanted_spoof("10.0.0.0", 8);
-    leef_add_unwanted_spoof("172.16.0.0", 12);
-    leef_add_unwanted_spoof("192.168.0.0", 16);
-    leef_add_unwanted_spoof("224.0.0.0", 3);
-    leef_add_unwanted_spoof("169.254.0.0", 16);
-    leef_add_unwanted_spoof("240.0.0.0", 5);
-}
-
 uint16_t leef_random_dest_syn_port()
 {
     static uint16_t common_ports[10] = { 21, 22, 23, 25, 80, 110, 143, 443, 3306, 8080 };
@@ -712,28 +690,21 @@ uint16_t leef_random_dest_syn_port()
 
 uint32_t leef_random_ip()
 {
+    static const uint8_t prefixes[] = { 2,3,4,8,12,15,16,17,18,23,24,27,31,32,33,35,
+                                        38,41,44,46,49,50,53,55,57,58,59,60,61,62,63,
+                                        64,65,66,67,68,69,70,71,73,74,75,76,77,78,79,
+                                        80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,
+                                        95,96,97,98,99,100,103,107,108,109,110,111,112,
+                                        113,115,116,117,118,119,120,121,122,124,125,126,
+                                        128,130,132,134,137,139,140,141,145,146,149,151,
+                                        153,158,159,164,171,173,174,175,176,177,178,180,
+                                        181,182,183,184,185,186,187,188,189,190,193,194,
+                                        195,196,197,199,201,202,204,206,207,208,209,210,
+                                        211,212,213,214,215,216,217,218,219,220,221,222 };
     uint32_t addr = 0;
-    addr |= leef_random_range(1, 254) << 0;
+    addr |= prefixes[leef_random_range(0, sizeof(prefixes)-1)];
     addr |= leef_random_range(0, 254) << 8;
     addr |= leef_random_range(0, 254) << 16;
     addr |= leef_random_range(1, 254) << 24;
-    return addr;
-}
-
-int leef_is_valid_spoofed_ip(uint32_t addr)
-{
-    int i;
-    for(i=0;i<unwated_spoofs_size;++i)
-        if((addr & unwated_spoofs[i][1]) == unwated_spoofs[i][0])
-            return 0;
-    return 1;
-}
-
-uint32_t leef_random_spoofed_ip()
-{
-    uint32_t addr;
-    do {
-        addr = leef_random_ip();
-    } while(!leef_is_valid_spoofed_ip(addr));
     return addr;
 }

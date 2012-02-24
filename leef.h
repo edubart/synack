@@ -135,9 +135,6 @@ extern volatile unsigned long leef_txbytes;
 static inline unsigned long leef_get_txpackets() { return leef_txpackets; }
 static inline unsigned long leef_get_txbytes() { return leef_txbytes; }
 
-void leef_add_unwanted_spoof(const char *ip, int mask);
-void leef_build_unwated_spoofs_list();
-
 /* fast random implementation */
 #define LEEF_MAX_RAND 65536
 
@@ -164,9 +161,6 @@ static inline uint32_t leef_random_u32() { return (uint32_t)(leef_random_u16() <
 static inline uint16_t leef_random_src_port() { return 32769 + (leef_rand() % 28231); }
 static inline uint16_t leef_random_dest_port() { return 1 + (leef_rand() % 65535); }
 uint16_t leef_random_dest_syn_port();
-
 uint32_t leef_random_ip();
-int leef_is_valid_spoofed_ip(uint32_t addr);
-uint32_t leef_random_spoofed_ip();
 
 #endif
