@@ -1295,7 +1295,7 @@ int main(int argc, char **argv)
     }
 
     if(pps_output > 0) {
-        sleep_interval = MIN((int)((1000000.0 * num_targets)/(double)pps_output), 1000000);
+        sleep_interval = MIN((int)((double)(1000000.0 * num_threads)/(double)pps_output), 1000000);
     }
 
     if(send_data_size > 1460) {
