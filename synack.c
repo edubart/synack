@@ -1290,7 +1290,7 @@ int main(int argc, char **argv)
 
     long tid;
     for(tid=0;tid<num_targets;++tid) {
-        if(targets_ips[tid] == 0)
+        if(targets_ports[tid] == 0)
             targets_ports[tid] = dest_port;
     }
 
