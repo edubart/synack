@@ -80,7 +80,6 @@ edubart - https://github.com/edubart
       -c [count]        - Max number of packets to send
       --help            - Print this help
 
-      == 
 == TIPS
 How to generate spoof ips list
   # on target machine
