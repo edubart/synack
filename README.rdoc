@@ -62,6 +62,7 @@ edubart - https://github.com/edubart
       -i [interface]    - Which interface to do the action (required)
       -h [host,host2]   - Target hosts separated by comma, accepts 'host:port' syntax too (required)
       -H [targets file] - Targets in a file where each line is in ip:port format
+      -n [subnet]       - Attack subnet, use formats like 192.168.0.0/16
       -p [port]         - Target port (default: random)
       -t [time]         - Run time in seconds (default: infinite)
       -u [interval]     - Sleep interval in microseconds (default: 10000)
@@ -78,6 +79,7 @@ edubart - https://github.com/edubart
       -y [delay]        - Drop established connections after delay
       -k [smac] [dmac]  - Use rawsendto kernel patch to send massive kpps
       -c [count]        - Max number of packets to send
+      -w                - Stop after one packet was sent to all targets
       --help            - Print this help
 
 == TIPS

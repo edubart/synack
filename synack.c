@@ -526,6 +526,8 @@ void interface_tx_thread()
             if(!quiet) {
                 if(run_time > 0)
                     printf("%.1f%%, ", (ticks_now/10)/(float)run_time);
+                else if(max_send_packets > 0)
+                    printf("%.1f%%, ", 100.0f*(txPackets/(float)max_send_packets));
                 printf("%s => tx: %d pps (%.02f mbps)\n",
                     interface,
                     pps,
@@ -970,6 +972,7 @@ void print_help(char **argv)
     printf("  -i [interface]    - Which interface to do the action (required)\n");
     printf("  -h [host,host2]   - Target hosts separated by comma, accepts 'host:port' syntax too (required)\n");
     printf("  -H [targets file] - Targets in a file where each line is in ip:port format\n");
+    printf("  -n [subnet]       - Attack subnet, use formats like 192.168.0.0/16\n");
     printf("  -p [port]         - Target port (default: random)\n");
     printf("  -t [time]         - Run time in seconds (default: infinite)\n");
     printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
@@ -986,6 +989,7 @@ void print_help(char **argv)
     printf("  -y [delay]        - Drop established connections after delay\n");
     printf("  -k [smac] [dmac]  - Use rawsendto kernel patch to send massive kpps\n");
     printf("  -c [count]        - Max number of packets to send\n");
+    printf("  -w                - Stop after one packet was sent to all targets\n");
     printf("  --help            - Print this help\n");
 }
 
@@ -1014,6 +1018,7 @@ int main(int argc, char **argv)
     int arg;
     const char *opt;
     uint16_t dest_port = 0;
+    int stop_on_sent = 0;
     for(arg=1;arg<argc;arg++) {
         opt = argv[arg];
         if(opt && opt[0] == '-' && strlen(opt) == 2) {
@@ -1117,6 +1122,10 @@ int main(int argc, char **argv)
 
                         targets_ips = (uint32_t *)malloc(num_targets * 4);
                         targets_ports = (uint16_t *)malloc(num_targets * 2);
+                        if(!targets_ips || !targets_ports) {
+                            fprintf(stderr, "not enough memory to allocate targets list!\n");
+                            return -1;
+                        }
 
                         fseek(fp, 0, SEEK_SET);
 
@@ -1152,6 +1161,63 @@ int main(int argc, char **argv)
                         fprintf(stderr, "failed opening spoofing IPs text file!\n");
                         return -1;
                     }
+                    break;
+                }
+                case 'n': {
+                    char *param = argv[++arg];
+                    char *subnet_addr_str = strtok(param, "/");
+                    char *subnet_mask_str = strtok(NULL, "/");
+
+                    if(!subnet_addr_str || !subnet_mask_str) {
+                        fprintf(stderr, "invalid subnet!\n");
+                        return -1;
+                    }
+
+                    printf("generating target ip addresses from subnet...\n");
+
+                    uint32_t subnet_addr = leef_string_to_addr(subnet_addr_str);
+                    int subnet_mask = atoi(subnet_mask_str);
+                    if(subnet_mask < 8) {
+                        fprintf(stderr, "subnet mask cannot be less than 8!\n");
+                        return -1;
+                    }
+
+
+                    uint32_t mask = leef_net_mask(32-subnet_mask);
+                    num_targets = mask+1;
+                    if(targets_ips) {
+                        free(targets_ips);
+                        free(targets_ports);
+                    }
+
+                    targets_ips = (uint32_t *)malloc(num_targets * 4);
+                    targets_ports = (uint16_t *)malloc(num_targets * 2);
+                    if(!targets_ips || !targets_ports) {
+                        fprintf(stderr, "not enough memory to allocate targets list!\n");
+                        return -1;
+                    }
+
+                    uint32_t rightaddr;
+                    uint32_t addr;
+                    int num_ips = 0;
+                    for(rightaddr=0;rightaddr<mask+1;++rightaddr) {
+                        addr = (htonl(subnet_addr) & ~mask) | rightaddr;
+
+                        uint8_t r[4];
+                        int i;
+                        for(i=0;i<4;++i)
+                            r[i] = (addr >> ((3-i)*8)) & 0xFF;
+
+                        if(r[0] == 0 || r[0] == 255 || r[1] == 255 || r[2] == 255 || r[3] == 0 || r[3] == 255)
+                            continue;
+
+                        targets_ips[num_ips] = htonl(addr);
+                        targets_ports[num_ips] = 0;
+                        num_ips++;
+                    }
+
+                    num_targets = num_ips;
+                    printf("done, calculated %d target ips\n", num_targets);
                     break;
                 }
                 case 'p':
@@ -1275,6 +1341,9 @@ int main(int argc, char **argv)
                 case 'c':
                     max_send_packets = atoi(argv[++arg]);
                     break;
+                case 'w':
+                    stop_on_sent = 1;
+                    break;
                 default:
                     fprintf(stderr, "incorrect option %s, see --help\n", opt);
                     return -1;
@@ -1294,6 +1363,9 @@ int main(int argc, char **argv)
             targets_ports[tid] = dest_port;
     }
 
+    if(stop_on_sent)
+        max_send_packets = num_targets;
+ 
     if(pps_output > 0) {
         sleep_interval = MIN((int)((double)(1000000.0 * num_threads)/(double)pps_output), 1000000);
     }
@@ -1308,7 +1380,7 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    if(!(action == MONITOR || action == TCP_PING || action == CONN_FLOOD) && num_targets != 1) {
+    if((action == TCP_PING || action == CONN_FLOOD) && num_targets != 1) {
         fprintf(stderr, "you can only use one target for this action!\n");
         return -1;
     }
