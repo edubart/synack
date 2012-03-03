@@ -1,22 +1,22 @@
-TARGET=synack
-SRCS=leef.c synack.c
-OBJS=${SRCS:.c=.o}
 CC=gcc
 CFLAGS=-Wall -O3 -fomit-frame-pointer
 LDFLAGS=-s -pthread -lm
 prefix=/usr/local
 
 .PHONY: all clean distclean install
-all: ${TARGET}
+all: synack sniffer
 
-${TARGET}: ${OBJS}
-	${CC} ${LDFLAGS} -o $@ $^
+synack: leef.o synack.o
+	${CC} ${LDFLAGS} -o synack $^
+
+sniffer: leef.o sniffer.o
+	${CC} ${LDFLAGS} -o sniffer $^
 
 ${OBJS}: %.o: %.c *.h
 	${CC} ${CFLAGS} -o $@ -c $<
 
 clean:
-	rm -f *.o ${TARGET}
+	rm -f *.o synack sniffer
 
 distclean: clean
 

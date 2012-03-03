@@ -241,9 +241,9 @@ int leef_sniff_next_packet(struct leef_handle *handle, leef_sniffed_packet *pack
         if(!leef_adjust_sniffed_packet_buffer(packet)) {
             static int warned = 0;
             if(!warned ) {
-              printf("WARNING: could not adjust packet offset for link type %d, report the developer\n", packet->linktype);
-              fflush(stdout);
-              warned = 1;
+                printf("WARNING: could not adjust packet offset for link type %d, report the developer\n", packet->linktype);
+                fflush(stdout);
+                warned = 1;
             }
             return 0;
         }
