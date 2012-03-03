@@ -70,7 +70,7 @@ int main(int argc, char **argv)
     uint32_t last_ticks, ticks_now;
     last_ticks = leef_get_ticks();
     build_unwated_ips_list();
-    unsigned long sniffed_packets = 0;
+    long sniffed_packets = 0;
     int pps = 0;
 
     printf("sniffing SYN+ACK on %s, output to %s\n", interface, filename);
@@ -91,7 +91,7 @@ int main(int argc, char **argv)
 
         ticks_now = leef_get_ticks();
         if(ticks_now - last_ticks >= 1000) {
-            printf("packets: %d pps     total: %ul\n", pps, sniffed_packets);
+            printf("packets: %d pps     total: %ld\n", pps, sniffed_packets);
             pps = 0;
             last_ticks = ticks_now;
         }
