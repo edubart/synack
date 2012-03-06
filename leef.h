@@ -136,7 +136,7 @@ static inline unsigned long leef_get_txpackets() { return leef_txpackets; }
 static inline unsigned long leef_get_txbytes() { return leef_txbytes; }
 
 /* fast random implementation */
-#define LEEF_RAND_MAX 32767
+#define LEEF_RAND_MAX 65535
 
 extern __thread unsigned long leef_next_rand_seed;
 
