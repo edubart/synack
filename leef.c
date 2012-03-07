@@ -655,9 +655,13 @@ int64_t leef_if_rx_packets(const char *devname)
 
 int64_t leef_if_rx_dropped(const char *devname)
 {
+    int64_t dropped = 0;
     char path[128];
     sprintf(path, "/sys/class/net/%s/statistics/rx_dropped", devname);
-    return leef_proc_read_int64(path);
+    dropped += leef_proc_read_int64(path);
+    sprintf(path, "/sys/class/net/%s/statistics/rx_missed_errors", devname);
+    dropped += leef_proc_read_int64(path);
+    return dropped;
 }
 
 int64_t leef_if_rx_bytes(const char *devname)
