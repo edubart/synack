@@ -926,7 +926,7 @@ void *tcp_ping_thread(void *param)
                 if(ping_ports[packet.in_ip.tcp->dest] != 0) {
                     rtt = (leef_get_micros() - ping_ports[packet.in_ip.tcp->dest]);
                     if(!quiet) {
-                        printf("ip=%s sport=%d flags=%s ttl=%d size=%d seq=%d rrt=%.02f ms\n",
+                        printf("ip=%s dport=%d flags=%s ttl=%d size=%d seq=%d rrt=%.02f ms\n",
                             leef_addr_to_string(dest_addr),
                             dest_port,
                             leef_name_tcp_flags(&packet),
@@ -944,7 +944,7 @@ void *tcp_ping_thread(void *param)
                     max_rtt = MAX(rtt, max_rtt);
                 } else {
                     if(!quiet) {
-                        printf("DUP! ip=%s sport=%d flags=%s ttl=%d size=%d seq=%d\n",
+                        printf("DUP! ip=%s dport=%d flags=%s ttl=%d size=%d seq=%d\n",
                             leef_addr_to_string(dest_addr),
                             dest_port,
                             leef_name_tcp_flags(&packet),
