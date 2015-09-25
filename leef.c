@@ -613,6 +613,15 @@ uint32_t leef_get_ticks() {
     return ((tv.tv_sec - firstTick) * 1000) + (tv.tv_usec / 1000);
 }
 
+int64_t leef_get_micros() {
+    static unsigned long firstMicro = 0;
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+    if(!firstMicro)
+        firstMicro = tv.tv_sec;
+    return ((tv.tv_sec - firstMicro) * 1000000) + tv.tv_usec;
+}
+
 int64_t leef_proc_read_int64(const char *path)
 {
     FILE *fp = fopen(path, "r");

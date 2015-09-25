@@ -36,7 +36,7 @@ enum e_action {
 volatile int running = 1;
 uint32_t src_addr = 1;
 const char *interface = NULL;
-volatile uint32_t sleep_interval = 10000;
+volatile uint32_t sleep_interval = 100000;
 uint8_t action_uuid = 0;
 uint32_t run_time = 0;
 int action = TCP_PING;
@@ -872,30 +872,34 @@ void *tcp_ping_thread(void *param)
 
     leef_sniffed_packet packet;
     uint16_t src_port = leef_random_src_port();
-    uint32_t ping_ports[65536];
-    uint32_t last_ticks;
-    uint32_t ticks_now;
+    int64_t ping_ports[65536];
+    int64_t last_rtts[65536];
+    int64_t last_micros;
+    int64_t micros_now;
     memset(ping_ports, 0, sizeof(ping_ports));
     int sent = 0;
     int received = 0;
-    unsigned long rtt_sum = 0;
-    int rtt;
-    int min_rtt = 9999999;
-    int max_rtt = -1;
+    int64_t rtt_sum = 0;
+    int64_t rtt;
+    int64_t min_rtt = 9999999;
+    float avg_rtt = 0;
+    int64_t max_rtt = -1;
     int stopping = 0;
+    float packet_loss = 1;
+    double jitter = 0;
 
-    last_ticks = leef_get_ticks();
+    last_micros = leef_get_micros();
 
     while(1) {
-        ticks_now = leef_get_ticks();
+        micros_now = leef_get_micros();
         if(!running && !stopping) {
             stopping = 1;
-            last_ticks = ticks_now;
+            last_micros = micros_now;
         }
 
         /* outputs attack information */
-        if(!stopping && ticks_now - last_ticks >= 1000) {
-            last_ticks = ticks_now;
+        if(!stopping && micros_now - last_micros >= sleep_interval) {
+            last_micros = micros_now;
 
             if(++src_port >= 61000)
                 src_port = 32769;
@@ -907,9 +911,9 @@ void *tcp_ping_thread(void *param)
                               leef_random_u16(), (action_uuid << 24) | sent,
                               use_tcp_options);
             sent++;
-            ping_ports[src_port] = ticks_now;
+            ping_ports[src_port] = micros_now;
         /* wait 1 sec before stopping */
-        } else if(stopping && leef_get_ticks() - last_ticks >= 500)
+        } else if(stopping && leef_get_micros() - last_micros >= 500000)
             break;
 
         if(leef_sniff_next_packet(&leef, &packet, 50)) {
@@ -920,19 +924,20 @@ void *tcp_ping_thread(void *param)
                action_uuid == ((packet.in_ip.tcp->ack_seq & 0xff000000) >> 24)) {
                 /* got a ping reply */
                 if(ping_ports[packet.in_ip.tcp->dest] != 0) {
-                    rtt = (leef_get_ticks() - ping_ports[packet.in_ip.tcp->dest]);
+                    rtt = (leef_get_micros() - ping_ports[packet.in_ip.tcp->dest]);
                     if(!quiet) {
-                        printf("ip=%s sport=%d flags=%s ttl=%d size=%d seq=%d rrt=%d ms\n",
+                        printf("ip=%s sport=%d flags=%s ttl=%d size=%d seq=%d rrt=%.02f ms\n",
                             leef_addr_to_string(dest_addr),
                             dest_port,
                             leef_name_tcp_flags(&packet),
                             packet.ip->ttl,
                             packet.ip->tot_len,
                             (packet.in_ip.tcp->ack_seq - 1) & 0xFFFFFF,
-                            rtt);
+                            rtt / 1000.0f);
                         fflush(stdout);
                     }
                     ping_ports[packet.in_ip.tcp->dest] = 0;
+                    last_rtts[received % 65536] = rtt;
                     received++;
                     rtt_sum += rtt;
                     min_rtt = MIN(rtt, min_rtt);
@@ -953,19 +958,39 @@ void *tcp_ping_thread(void *param)
         }
     }
 
+    /* calculate packet loss */
+    if(sent > 0)
+        packet_loss = (sent - received)/(float)sent;
+
+    if(received > 0) {
+        /* calculate avg rtt */
+        avg_rtt = rtt_sum/received;
+
+        /* calculate jitter */
+        int j;
+        double d;
+        int jmax = MIN(received,65536);
+        for(j=0;j<jmax;++j) {
+            d = last_rtts[j] - avg_rtt;
+            jitter += d * d;
+        }
+        jitter = sqrt(jitter/jmax);
+    }
+
     /* print stastistics */
     if(!quiet) {
         printf("\n--- %s:%d ping statistics ---\n", leef_addr_to_string(dest_addr), dest_port);
-        printf("%d packets sent, %d packets received, %.02f%% packet loss\n",
+        printf("%d packets sent, %d packets received, %.02f%% packet loss, %.02fms jitter\n",
             sent,
             received,
-            sent > 0 ? ((sent - received)*100.0f)/(float)sent : .0f);
+            packet_loss * 100.0f,
+            jitter / 1000.0f);
 
         if(received > 0) {
-            printf("rtt min/avr/max = %d/%d/%d ms\n",
-                min_rtt,
-                (int)(rtt_sum/received),
-                max_rtt);
+            printf("rtt min/avr/max = %.02f/%.02f/%.02f ms\n",
+                min_rtt/1000.0f,
+                avg_rtt/1000.0f,
+                max_rtt/1000.0f);
         }
     }
 
@@ -1007,7 +1032,7 @@ void print_help(char **argv)
     printf("  -n [subnet]       - Attack subnet, use formats like 192.168.0.0/16\n");
     printf("  -p [port]         - Target port (default: random)\n");
     printf("  -t [time]         - Run time in seconds (default: infinite)\n");
-    printf("  -u [interval]     - Sleep interval in microseconds (default: 10000)\n");
+    printf("  -u [interval]     - Sleep interval in microseconds (default: 100000)\n");
     printf("  -j [pps]          - Calculates a sleep interval for desired packets per second output (accurate with multiple threads)\n");
     printf("  -b [bytes]        - Additional random bytes to send as data (default: 0)\n");
     printf("  -m [threads]      - Number of send threads (default: 1)\n");
