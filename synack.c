@@ -42,7 +42,7 @@ uint32_t run_time = 0;
 int action = TCP_PING;
 int num_threads = 1;
 uint32_t *spoof_addresses = NULL;
-uint32_t spoof_addresses_size = 0;
+int spoof_addresses_size = 0;
 uint8_t *send_data = NULL;
 int send_data_size = 0;
 int quiet = 0;
@@ -1115,7 +1115,7 @@ int main(int argc, char **argv)
                         char *tportstr = strtok_r(NULL, ":", &tok2);
 
                         uint32_t dest_addr = leef_resolve_hostname(thoststr);
-                        if(dest_addr == -1) {
+                        if(dest_addr == 0xffffffff) {
                             fprintf(stderr, "could not resolve hostname address\n");
                             return -1;
                         }
@@ -1181,7 +1181,7 @@ int main(int argc, char **argv)
                                 port = atoi(target_portstr );
 
                             uint32_t addr = leef_string_to_addr(target_ipstr);
-                            if(addr != 0 && addr != (uint32_t)-1) {
+                            if(addr != 0 && addr != 0xffffffff) {
                                 targets_ips[num_ips] = addr;
                                 targets_ports[num_ips] = port;
                                 num_ips++;
@@ -1270,7 +1270,7 @@ int main(int argc, char **argv)
                         src_addr = 0;
                     } else {
                         src_addr = leef_resolve_hostname(argv[arg]);
-                        if(src_addr == -1) {
+                        if(src_addr == 0xffffffff) {
                             fprintf(stderr, "could not resolve source address\n");
                             return -1;
                         }
@@ -1314,7 +1314,7 @@ int main(int argc, char **argv)
                             if(strlen(c) < 7)
                                 continue;
                             uint32_t addr = leef_string_to_addr(ip);
-                            if(addr != 0 && addr != (uint32_t)-1)
+                            if(addr != 0 && addr != 0xffffffff)
                                 spoof_addresses[num_ips++] = addr;
                         }
                         fclose(fp);

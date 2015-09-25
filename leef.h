@@ -119,7 +119,7 @@ const char *leef_name_tcp_flags(leef_sniffed_packet *packet);
 uint32_t leef_resolve_hostname(const char *hostname);
 uint32_t leef_string_to_addr(const char *str);
 char *leef_addr_to_string(uint32_t addr);
-uint32_t leef_net_mask(int bits);
+uint32_t leef_net_mask(uint32_t bits);
 uint32_t leef_get_ticks();
 int64_t leef_proc_read_int64(const char *path);
 int64_t leef_if_tx_packets(const char *devname);

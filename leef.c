@@ -584,7 +584,7 @@ uint32_t leef_string_to_addr(const char *str)
 {
     in_addr_t addr;
     if((addr = inet_addr(str)) == (unsigned long)-1)
-        return 0;
+        return 0xffffffff;
     return (uint32_t)addr;
 }
 
@@ -595,7 +595,7 @@ char *leef_addr_to_string(uint32_t addr)
     return inet_ntoa(in);
 }
 
-uint32_t leef_net_mask(int bits)
+uint32_t leef_net_mask(uint32_t bits)
 {
     uint32_t mask = 0;
     uint32_t bit;
