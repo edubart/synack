@@ -34,6 +34,7 @@ enum e_action {
 
 /* global variables */
 volatile int running = 1;
+int jsonout = 0;
 uint32_t src_addr = 1;
 const char *interface = NULL;
 volatile uint32_t sleep_interval = 100000;
@@ -872,6 +873,7 @@ void *tcp_ping_thread(void *param)
 
     leef_sniffed_packet packet;
     uint16_t src_port = leef_random_src_port();
+    uint16_t checking_port = src_port - (10000000/sleep_interval);
     int64_t ping_ports[65536];
     int64_t last_rtts[65536];
     int64_t last_micros;
@@ -879,6 +881,7 @@ void *tcp_ping_thread(void *param)
     memset(ping_ports, 0, sizeof(ping_ports));
     int sent = 0;
     int received = 0;
+    int lost = 0;
     int64_t rtt_sum = 0;
     int64_t rtt;
     int64_t min_rtt = 9999999;
@@ -887,6 +890,8 @@ void *tcp_ping_thread(void *param)
     int stopping = 0;
     float packet_loss = 1;
     double jitter = 0;
+    double ttl_sum = 0;
+    double avg_ttl = 0;
 
     last_micros = leef_get_micros();
 
@@ -897,12 +902,28 @@ void *tcp_ping_thread(void *param)
             last_micros = micros_now;
         }
 
+        if(!quiet) {
+            if(ping_ports[checking_port] != 0) {
+                rtt = (leef_get_micros() - ping_ports[checking_port]);
+                printf("LOST! ip=%s dport=%d lost=%d timeout=%.02fms\n",
+                    leef_addr_to_string(dest_addr),
+                    dest_port,
+                    lost,
+                    rtt / 1000.0f);
+                ping_ports[checking_port] = 0;
+                lost++;
+            }
+        }
+
         /* outputs attack information */
         if(!stopping && micros_now - last_micros >= sleep_interval) {
             last_micros = micros_now;
 
             if(++src_port >= 61000)
                 src_port = 32769;
+
+            if(++checking_port >= 61000)
+                checking_port = 32769;
 
             /* send a SYN ping */
             leef_send_tcp_syn(&leef,
@@ -912,8 +933,8 @@ void *tcp_ping_thread(void *param)
                               use_tcp_options);
             sent++;
             ping_ports[src_port] = micros_now;
-        /* wait 1 sec before stopping */
-        } else if(stopping && leef_get_micros() - last_micros >= 500000)
+        /* wait 500ms sec before stopping */
+        } else if(stopping && (leef_get_micros() - last_micros >= 500000 || received == sent))
             break;
 
         if(leef_sniff_next_packet(&leef, &packet, 50)) {
@@ -926,13 +947,14 @@ void *tcp_ping_thread(void *param)
                 if(ping_ports[packet.in_ip.tcp->dest] != 0) {
                     rtt = (leef_get_micros() - ping_ports[packet.in_ip.tcp->dest]);
                     if(!quiet) {
-                        printf("ip=%s dport=%d flags=%s ttl=%d size=%d seq=%d rrt=%.02f ms\n",
+                        printf("ip=%s dport=%d flags=%s ttl=%d size=%d seq=%d lost=%d rrt=%.02f ms\n",
                             leef_addr_to_string(dest_addr),
                             dest_port,
                             leef_name_tcp_flags(&packet),
                             packet.ip->ttl,
                             packet.ip->tot_len,
                             (packet.in_ip.tcp->ack_seq - 1) & 0xFFFFFF,
+                            lost,
                             rtt / 1000.0f);
                         fflush(stdout);
                     }
@@ -940,6 +962,7 @@ void *tcp_ping_thread(void *param)
                     last_rtts[received % 65536] = rtt;
                     received++;
                     rtt_sum += rtt;
+                    ttl_sum += packet.ip->ttl;
                     min_rtt = MIN(rtt, min_rtt);
                     max_rtt = MAX(rtt, max_rtt);
                 } else {
@@ -965,6 +988,7 @@ void *tcp_ping_thread(void *param)
     if(received > 0) {
         /* calculate avg rtt */
         avg_rtt = rtt_sum/received;
+        avg_ttl = ttl_sum/received;
 
         /* calculate jitter */
         int j;
@@ -975,7 +999,13 @@ void *tcp_ping_thread(void *param)
             jitter += d * d;
         }
         jitter = sqrt(jitter/jmax);
+    } else {
+        min_rtt = -1;
+        avg_rtt = -1;
+        max_rtt = -1;
+        avg_ttl = -1;
     }
+
 
     /* print stastistics */
     if(!quiet) {
@@ -987,12 +1017,30 @@ void *tcp_ping_thread(void *param)
             jitter / 1000.0f);
 
         if(received > 0) {
-            printf("rtt min/avr/max = %.02f/%.02f/%.02f ms\n",
+            printf("rtt min/avr/max = %.02f/%.02f/%.02f ms, avg ttl = %.02f\n",
                 min_rtt/1000.0f,
                 avg_rtt/1000.0f,
-                max_rtt/1000.0f);
+                max_rtt/1000.0f,
+                avg_ttl);
         }
     }
+
+    if(jsonout) {
+        printf("{ \"ip\": \"%s\", \"port\": %d, \"sent\": %d, \"received\": %d, \"loss\": %.02f, \"jitter\": %.02f, \"min_rtt\": %.02f, \"avg_rtt\": %.02f, \"max_rtt\": %.02f, \"avg_ttl\": %.02f, \"unixtime\": %ld }\n",
+                leef_addr_to_string(dest_addr),
+                dest_port,
+                sent,
+                received,
+                packet_loss * 100.0f,
+                jitter / 1000.0f,
+                min_rtt/1000.0f,
+                avg_rtt/1000.0f,
+                max_rtt/1000.0f,
+                avg_ttl,
+                time(NULL));
+    }
+
+
 
     leef_terminate(&leef);
     return NULL;
@@ -1047,6 +1095,7 @@ void print_help(char **argv)
     printf("  -k [smac] [dmac]  - Use rawsendto kernel patch to send massive kpps\n");
     printf("  -c [count]        - Max number of packets to send\n");
     printf("  -w                - Stop after one packet was sent to all targets\n");
+    printf("  -J                - Output ping stats as json\n");
     printf("  --help            - Print this help\n");
 }
 
@@ -1306,6 +1355,9 @@ int main(int argc, char **argv)
                     break;
                 case 'j':
                     pps_output = atoi(argv[++arg]);
+                    break;
+                case 'J':
+                    jsonout = 1;
                     break;
                 case 'q':
                     quiet = 1;
