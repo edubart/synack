@@ -943,6 +943,7 @@ void *tcp_ping_thread(void *param)
                packet.ip->saddr == dest_addr &&
                packet.in_ip.tcp->source == dest_port &&
                action_uuid == ((packet.in_ip.tcp->ack_seq & 0xff000000) >> 24)) {
+                int seq = (packet.in_ip.tcp->ack_seq) & 0xFFFFFF;
                 /* got a ping reply */
                 if(ping_ports[packet.in_ip.tcp->dest] != 0) {
                     rtt = (leef_get_micros() - ping_ports[packet.in_ip.tcp->dest]);
@@ -953,7 +954,7 @@ void *tcp_ping_thread(void *param)
                             leef_name_tcp_flags(&packet),
                             packet.ip->ttl,
                             packet.ip->tot_len,
-                            (packet.in_ip.tcp->ack_seq - 1) & 0xFFFFFF,
+                            seq,
                             lost,
                             rtt / 1000.0f);
                         fflush(stdout);
@@ -973,7 +974,7 @@ void *tcp_ping_thread(void *param)
                             leef_name_tcp_flags(&packet),
                             packet.ip->ttl,
                             packet.ip->tot_len,
-                            (packet.in_ip.tcp->ack_seq - 1) & 0xFFFF);
+                            seq);
                         fflush(stdout);
                     }
                 }
@@ -1006,24 +1007,30 @@ void *tcp_ping_thread(void *param)
         avg_ttl = -1;
     }
 
-
     /* print stastistics */
     if(!quiet) {
-        printf("\n--- %s:%d ping statistics ---\n", leef_addr_to_string(dest_addr), dest_port);
-        printf("%d packets sent, %d packets received, %.02f%% packet loss, %.02fms jitter\n",
-            sent,
-            received,
-            packet_loss * 100.0f,
-            jitter / 1000.0f);
+        printf("\n--- %s:%d TCP ping statistics ---\n", leef_addr_to_string(dest_addr), dest_port);
+    } else
+        printf("%s:%d ", leef_addr_to_string(dest_addr), dest_port);
+    
+    printf("%d packets sent, %d packets received, %.02f%% packet loss",
+        sent,
+        received,
+        packet_loss * 100.0f);
 
-        if(received > 0) {
-            printf("rtt min/avr/max = %.02f/%.02f/%.02f ms, avg ttl = %.02f\n",
-                min_rtt/1000.0f,
-                avg_rtt/1000.0f,
-                max_rtt/1000.0f,
-                avg_ttl);
-        }
+    if(received > 0) {
+        if(!quiet)
+            printf("\n");
+        else
+            printf(", ");
+        printf("jitter = %.02f ms, rtt min/avr/max = %.02f/%.02f/%.02f ms, avg ttl = %.02f",
+            jitter/1000.0f,
+            min_rtt/1000.0f,
+            avg_rtt/1000.0f,
+            max_rtt/1000.0f,
+            avg_ttl);
     }
+    printf("\n");
 
     if(jsonout) {
         printf("{ \"ip\": \"%s\", \"port\": %d, \"sent\": %d, \"received\": %d, \"loss\": %.02f, \"jitter\": %.02f, \"min_rtt\": %.02f, \"avg_rtt\": %.02f, \"max_rtt\": %.02f, \"avg_ttl\": %.02f, \"unixtime\": %ld }\n",
@@ -1160,6 +1167,11 @@ int main(int argc, char **argv)
                     action = MONITOR;
                     break;
                 case 'i':
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
+                    
                     interface = argv[++arg];
                     if(src_addr == 1) {
                         src_addr = leef_if_ipv4(interface);
@@ -1170,6 +1182,11 @@ int main(int argc, char **argv)
                     }
                     break;
                 case 'h': {
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
+
                     if(targets_ips) {
                         free(targets_ips);
                         free(targets_ports);
@@ -1208,6 +1225,11 @@ int main(int argc, char **argv)
                     break;
                 }
                 case 'H': {
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
+
                     FILE *fp = fopen(argv[++arg], "r");
                     if(fp) {
                         char ip[32];
@@ -1273,6 +1295,11 @@ int main(int argc, char **argv)
                     break;
                 }
                 case 'n': {
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
+
                     char *param = argv[++arg];
                     char *subnet_addr_str = strtok(param, "/");
                     char *subnet_mask_str = strtok(NULL, "/");
@@ -1330,9 +1357,17 @@ int main(int argc, char **argv)
                     break;
                 }
                 case 'p':
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     dest_port = atoi(argv[++arg]);
                     break;
                 case 'm':
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     num_threads = atoi(argv[++arg]);
                     if(num_threads < 1) {
                         fprintf(stderr, "use at least 1 thread\n");
@@ -1340,6 +1375,10 @@ int main(int argc, char **argv)
                     }
                     break;
                 case 's':
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     if(strcmp(argv[++arg], "random") == 0) {
                         src_addr = 0;
                     } else {
@@ -1351,9 +1390,17 @@ int main(int argc, char **argv)
                     }
                     break;
                 case 'u':
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     sleep_interval = atoi(argv[++arg]);
                     break;
                 case 'j':
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     pps_output = atoi(argv[++arg]);
                     break;
                 case 'J':
@@ -1363,6 +1410,10 @@ int main(int argc, char **argv)
                     quiet = 1;
                     break;
                 case 'f': {
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     FILE *fp = fopen(argv[++arg], "r");
                     if(fp) {
                         char ip[32];
@@ -1406,9 +1457,17 @@ int main(int argc, char **argv)
                     break;
                 }
                 case 't':
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     run_time = (uint32_t)(atoi(argv[++arg]));
                     break;
                 case 'd': {
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     FILE *fp = fopen(argv[++arg], "rb");
                     if(fp) {
                         fseek(fp, 0, SEEK_END);
@@ -1424,6 +1483,10 @@ int main(int argc, char **argv)
                     break;
                 }
                 case 'z': {
+                    if(argc <= arg+2) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     send_data = (uint8_t *) malloc(2048);
                     const char *page = argv[++arg];
                     const char *host = argv[++arg];
@@ -1435,6 +1498,10 @@ int main(int argc, char **argv)
                     use_tcp_options = 1;
                     break;
                 case 'b':
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     send_data_size = atoi(argv[++arg]);
                     send_data = (uint8_t *)malloc(send_data_size);
                     fill_data_with_random = 1;
@@ -1443,14 +1510,26 @@ int main(int argc, char **argv)
                     drop_on_ack = 1;
                     break;
                 case 'y':
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     drop_time = atoi(argv[++arg]);
                     break;
                 case 'k':
+                    if(argc <= arg+2) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     read_macaddr(src_mac, argv[++arg]);
                     read_macaddr(dest_mac, argv[++arg]);
                     rawsendto = 1;
                     break;
                 case 'c':
+                    if(argc <= arg+1) {
+                        fprintf(stderr, "missing argument for %s\n", opt);
+                        return -1;
+                    }
                     max_send_packets = atoi(argv[++arg]);
                     break;
                 case 'w':
@@ -1492,9 +1571,12 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    if((action == TCP_PING || action == CONN_FLOOD) && num_targets != 1) {
-        fprintf(stderr, "you can only use one target for this action!\n");
-        return -1;
+    if((action == CONN_FLOOD || action == TCP_PING)) {
+        if(num_threads != 1) {
+            fprintf(stderr, "you cant configure threads for this action!\n");
+            return -1;
+        }
+        num_threads = num_targets;
     }
 
     if(interface == NULL) {

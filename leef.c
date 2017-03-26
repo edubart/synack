@@ -583,7 +583,8 @@ uint32_t leef_resolve_hostname(const char *hostname)
 uint32_t leef_string_to_addr(const char *str)
 {
     in_addr_t addr;
-    if((addr = inet_addr(str)) == (unsigned long)-1)
+    const unsigned long invalid = (unsigned long)-1;
+    if((addr = inet_addr(str)) == invalid)
         return 0xffffffff;
     return (uint32_t)addr;
 }

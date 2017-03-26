@@ -1,16 +1,16 @@
 CC=gcc
-CFLAGS=-Wall -O3 -fomit-frame-pointer
-LDFLAGS=-s -pthread -lm
+CFLAGS=-Wall -Wextra -Wno-unused-parameter -Wno-unused-result -O2
+LDFLAGS=-s -lm -pthread
 prefix=/usr/local
 
 .PHONY: all clean distclean install
 all: synack sniffer
 
 synack: leef.o synack.o
-	${CC} ${LDFLAGS} -o synack $^
+	${CC} -o synack $^ ${LDFLAGS}
 
 sniffer: leef.o sniffer.o
-	${CC} ${LDFLAGS} -o sniffer $^
+	${CC} -o sniffer $^ ${LDFLAGS}
 
 ${OBJS}: %.o: %.c *.h
 	${CC} ${CFLAGS} -o $@ -c $<
