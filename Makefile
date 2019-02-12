@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -Wno-unused-parameter -Wno-unused-result -O2
+CFLAGS=-Wall -Wextra -Wno-unused-parameter -O2
 LDFLAGS=-s -lm -pthread
 prefix=/usr/local
 
