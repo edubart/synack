@@ -49,7 +49,7 @@ int send_data_size = 0;
 int quiet = 0;
 int drop_on_ack = 0;
 int drop_time = -1;
-int use_tcp_options = 0;
+int use_tcp_options = 1;
 int fill_data_with_random = 0;
 int pps_output = 0;
 uint8_t src_mac[6];
@@ -1012,7 +1012,7 @@ void *tcp_ping_thread(void *param)
         printf("\n--- %s:%d TCP ping statistics ---\n", leef_addr_to_string(dest_addr), dest_port);
     } else
         printf("%s:%d ", leef_addr_to_string(dest_addr), dest_port);
-    
+
     printf("%d packets sent, %d packets received, %.02f%% packet loss",
         sent,
         received,
@@ -1095,7 +1095,7 @@ void print_help(char **argv)
     printf("  -d [binary file]  - Send binary file as data\n");
     printf("  -z [page] [host]  - Send simple HTTP 1.1 request as data\n");
     printf("  -f [text file]    - Read a list of IPs from a text file for spoofing\n");
-    printf("  -o                - Enable tcp options on SYN packets\n");
+    printf("  -o                - Disable tcp options on SYN packets\n");
     printf("  -q                - Quiet, don't print statistics output\n");
     printf("  -x                - Drop established connections when receive ACK packets\n");
     printf("  -y [delay]        - Drop established connections after delay\n");
@@ -1171,7 +1171,7 @@ int main(int argc, char **argv)
                         fprintf(stderr, "missing argument for %s\n", opt);
                         return -1;
                     }
-                    
+
                     interface = argv[++arg];
                     if(src_addr == 1) {
                         src_addr = leef_if_ipv4(interface);
@@ -1495,7 +1495,7 @@ int main(int argc, char **argv)
                     break;
                 }
                 case 'o':
-                    use_tcp_options = 1;
+                    use_tcp_options = 0;
                     break;
                 case 'b':
                     if(argc <= arg+1) {
@@ -1556,7 +1556,7 @@ int main(int argc, char **argv)
 
     if(stop_on_sent)
         max_send_packets = num_targets;
- 
+
     if(pps_output > 0) {
         sleep_interval = MIN((int)((double)(1000000.0 * num_threads)/(double)pps_output), 1000000);
     }

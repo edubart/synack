@@ -74,7 +74,7 @@ edubart - https://github.com/edubart
       -d [binary file]  - Send binary file as data
       -z [page] [host]  - Send simple HTTP 1.1 request as data
       -f [text file]    - Read a list of IPs from a text file for spoofing
-      -o                - Enable tcp options on SYN packets
+      -o                - Disable tcp options on SYN packets
       -q                - Quiet, don't print statistics output
       -x                - Drop established connections when receive ACK packets
       -y [delay]        - Drop established connections after delay
